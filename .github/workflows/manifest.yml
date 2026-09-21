@@ -1,0 +1,73 @@
+# OPS-07 · EL MANIFEST DE INTEGRIDAD, PRODUCIDO FUERA DEL ALCANCE DEL AGENTE.
+#
+# `certificacion.yml` responde "este arbol cumple". Este responde otra pregunta:
+# "estos son los bytes exactos que publica el tag". Son trabajos distintos y por eso
+# son workflows distintos — este necesita permiso de escritura, y `certificacion`
+# no debe tenerlo nunca.
+#
+# D-C48 · El manifest NO se commitea. Vive como activo del release, generado aqui a
+# partir del arbol del tag. Un manifest dentro del arbol seria un checksum calculado
+# contra si mismo, que es lo que ALMA-UPGRADE.md prohibe explicitamente.
+#
+# ESTE WORKFLOW VIAJA Y NO DEBE CORRER EN EL DESTINO. Publicar un manifest es un acto
+# del estandar, no de quien lo adopta: el consumidor lo DESCARGA. Asi que el primer
+# paso pregunta si existe el generador —no si "soy el estandar", que es la clase de
+# escape que H-H5 borro— y si no existe, el run sale limpio diciendo por que. Antes de
+# v0.1.2 era solo inutil en un consumidor; con el generador mudado a
+# verificadores-estandar/ pasaba a fallar con "no such file".
+
+name: manifest
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  manifest:
+    name: manifest
+    runs-on: ubuntu-latest
+    # Excepcion declarada al paso 5 de RAIZ-DE-CONFIANZA.md (GITHUB_TOKEN read-only
+    # por defecto): adjuntar un activo a un release exige escritura. Se acota a este
+    # job, a este permiso, y solo dispara sobre tags. En un consumidor el permiso se
+    # concede y no se usa: los pasos que escriben no corren.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Este repositorio, ¿publica manifest?
+        id: aplica
+        run: |
+          if [ -f verificadores-estandar/manifest.sh ]; then
+            echo "publica=si" >> "$GITHUB_OUTPUT"
+            echo "Este repositorio publica el manifest de su propio tag."
+          else
+            echo "publica=no" >> "$GITHUB_OUTPUT"
+            echo "Este repositorio NO publica manifest de integridad, y eso es correcto."
+            echo "El generador vive en verificadores-estandar/, que por diseño no viaja a los"
+            echo "proyectos que adoptan el estandar. Un consumidor DESCARGA el manifest del"
+            echo "release del tag del estandar; no lo genera, porque un checksum calculado"
+            echo "contra los archivos que uno mismo se descargo no verifica nada (D-C48)."
+            echo "Nada que hacer en este run."
+          fi
+
+      - name: Generar el manifest desde el arbol del tag
+        if: steps.aplica.outputs.publica == 'si'
+        run: bash ./verificadores-estandar/manifest.sh > manifest.sha256
+
+      - name: Dejarlo en el log del run
+        if: steps.aplica.outputs.publica == 'si'
+        run: |
+          echo "Manifest de ${GITHUB_REF_NAME} — registro publico:"
+          cat manifest.sha256
+
+      - name: Publicarlo como activo del release
+        if: steps.aplica.outputs.publica == 'si'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          gh release view "$tag" >/dev/null 2>&1 \
+            || gh release create "$tag" --title "$tag" --verify-tag \
+                 --notes "Manifest de integridad adjunto. Ver ALMA-UPGRADE.md."
+          gh release upload "$tag" manifest.sha256 --clobber

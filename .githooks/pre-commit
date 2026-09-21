@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+# OPS-07 nivel 1 — PREVENCION LOCAL. NO CERTIFICA.
+#
+# Proposito honesto: atrapar el DESCUIDO. Olvido de correr la DoD, edicion
+# accidental de un archivo verbatim, puente roto, secreto a punto de entrar.
+#
+# Quien QUIERA evadirlo, puede: modificar este hook, usar --no-verify, editar el
+# manifest local, falsear la salida. El estandar lo declara en vez de fingir lo
+# contrario, porque presentarlo como barrera dura seria un fail-open disfrazado —
+# justo lo que SAD-07 prohibe.
+#
+# La certificacion es el nivel 2, y vive fuera de este repositorio.
+
+set -u
+fallos=0
+aviso() { echo "  [OPS-07 n1] $*"; }
+
+echo "[OPS-07 n1] prevencion local — no es certificacion"
+
+# --- 1 · integridad de los archivos verbatim -------------------------------
+if [ -f .alma/manifest.sha256 ]; then
+  if ! sha256sum -c --quiet .alma/manifest.sha256 2>/dev/null; then
+    aviso "FALLO: un archivo verbatim del estandar fue modificado localmente."
+    aviso "       Los cambios al estandar se hacen en alma-standard, no aqui."
+    fallos=$((fallos+1))
+  fi
+else
+  aviso "aviso: no hay manifest. Corre 'alma:upgrade': lo DESCARGA del release del tag. No se calcula aqui (D-C48)."
+fi
+
+# --- 1b · nada sobra bajo el andamiaje --------------------------------------
+if [ -f verificadores/andamiaje.sh ]; then
+  if ! bash verificadores/andamiaje.sh; then
+    aviso "FALLO: hay archivos bajo el andamiaje que el manifest no lista."
+    fallos=$((fallos+1))
+  fi
+fi
+
+# --- 2 · el puente @AGENTS.md (EST-01) -------------------------------------
+if [ -f AGENTS.md ]; then
+  if [ ! -f CLAUDE.md ]; then
+    aviso "FALLO: falta CLAUDE.md. Sin el puente, Claude Code carga CERO"
+    aviso "       instrucciones EN SILENCIO, sin error. Inaceptable bajo SAD-07."
+    fallos=$((fallos+1))
+  elif ! grep -q '^@AGENTS\.md' CLAUDE.md; then
+    aviso "FALLO: CLAUDE.md existe pero no importa AGENTS.md."
+    aviso "       Debe ser un import (@AGENTS.md), no una copia del contenido."
+    fallos=$((fallos+1))
+  fi
+fi
+
+# --- 2b · fin de linea del andamiaje (H-H7) ---------------------------------
+# Va ANTES del modo a proposito: un .alma/modo-mision con CRLF hace que la seccion
+# siguiente acuse "modo invalido" sobre un archivo que se ve correcto. Primero se
+# nombra la causa.
+if [ -f verificadores/lineas.sh ]; then
+  if ! bash verificadores/lineas.sh; then
+    aviso "FALLO: fin de linea. Ver la salida de arriba."
+    fallos=$((fallos+1))
+  fi
+fi
+
+# --- 2c · identidad del ejecutor (D-C37, H-H10) -----------------------------
+# No se puede comprobar que una identidad sea la CORRECTA. Si se puede exigir que el
+# repositorio la DECLARE en vez de heredar la global en silencio, que es como el
+# commit raiz de un proyecto acaba atribuido a otra cuenta sin que nadie lo note.
+# Misma forma que el modo de mision: no se interpreta el silencio.
+if [ -z "$(git config --local user.email 2>/dev/null)" ] \
+|| [ -z "$(git config --local user.name 2>/dev/null)" ]; then
+  aviso "FALLO: este repositorio no declara la identidad del ejecutor."
+  aviso "       Sin ella se hereda la identidad global, y un commit puede quedar"
+  aviso "       atribuido a otra cuenta sin aviso. Declarala aqui:"
+  aviso "           git config user.name  \"Tu Nombre\""
+  aviso "           git config user.email \"tu@correo\""
+  fallos=$((fallos+1))
+fi
+
+# --- 3 · frontera de modo de mision (SAD-06) -------------------------------
+# El modo es OBLIGATORIO y su ausencia FALLA. Antes solo avisaba: un optimizador
+# literal que no creaba el archivo, o escribia cualquier otra cosa, no entraba a
+# ninguna rama y tocaba app/ y packages/ en el mismo commit sin que `fallos` subiera.
+MODO="$(cat .alma/modo-mision 2>/dev/null || echo '')"
+case "$MODO" in
+  aplicacion|paquete|genesis|estandar) : ;;
+  "") aviso "FALLO: modo de mision no declarado. Escribe uno de los cuatro en"
+      aviso "       .alma/modo-mision antes de commitear (EST-04 lo exige al abrir)."
+      fallos=$((fallos+1)) ;;
+  *)  aviso "FALLO: modo de mision invalido: '$MODO'."
+      aviso "       Validos: aplicacion | paquete | genesis | estandar."
+      fallos=$((fallos+1)) ;;
+esac
+
+if [ "$MODO" = "aplicacion" ]; then
+  if git diff --cached --name-only | grep -q '^packages/'; then
+    aviso "FALLO: mision de APLICACION con cambios en packages/."
+    aviso "       Legible siempre, inmodificable siempre. Pausa y bifurca."
+    fallos=$((fallos+1))
+  fi
+elif [ "$MODO" = "paquete" ]; then
+  if git diff --cached --name-only | grep -q '^app/'; then
+    aviso "FALLO: mision de PAQUETE con cambios en app/."
+    fallos=$((fallos+1))
+  fi
+fi
+
+# --- 4 · barrido de secretos -------------------------------------------------
+# No se reimplementa aqui: el job de certificacion corre el MISMO verificador.
+# Un hook no activado no corre, y una regla sin excepcion no puede depender de eso.
+if [ -f verificadores/secretos.sh ]; then
+  if ! bash verificadores/secretos.sh --diff; then
+    aviso "FALLO: barrido de secretos. Ver la salida de arriba."
+    fallos=$((fallos+1))
+  fi
+fi
+
+# --- 5 · catalogo de interfaz (AVISA, no bloquea en n1) ----------------------
+# D-C44 · la palanca se separa por reversibilidad del daño. Un catalogo
+# desatendido se arregla en el commit siguiente; un secreto empujado hay que
+# rotarlo. Compartir interruptor hacia que la comprobacion barata decidiera el
+# destino de la cara: un catalogo lento o con deuda ensenaba --no-verify, y
+# --no-verify apagaba tambien el barrido de secretos.
+#
+# ATENCION (H-ADV-8): mientras el nivel 2 NO EXISTA, esto no es un traslado del
+# bloqueo — es deteccion diferida. Hoy nadie detiene un catalogo roto: aqui avisa,
+# y el piso que deberia detenerlo todavia no esta construido. Se dice para que
+# nadie lo lea como una garantia que aun no hay.
+if [ -f verificadores/catalogo.sh ]; then
+  if ! bash verificadores/catalogo.sh --diff; then
+    aviso "aviso: el catalogo de interfaz no pasa. NO detiene este commit;"
+    aviso "       el job de certificacion si lo hara. Conviene arreglarlo ahora."
+  fi
+fi
+
+# --- veredicto ---------------------------------------------------------------
+# D-C46 · se enumera lo comprobado Y lo que quedo sin comprobar. "Sin descuidos"
+# a secas se lee como "todo bien", y el nivel 1 no puede afirmar eso: la mitad de
+# la DoD corre solo en el nivel 2. Correrla aqui haria el hook lento, y un hook
+# lento ensena --no-verify, que apaga tambien el barrido de secretos (D-C44).
+# Asi que el nivel 1 no predice al nivel 2: declara en que se diferencia de el.
+if [ "$fallos" -gt 0 ]; then
+  echo "[OPS-07 n1] $fallos comprobacion(es) fallaron. Commit detenido."
+  echo "[OPS-07 n1] Si esto es un falso positivo, --no-verify existe y queda"
+  echo "            registrado como lo que es: una decision tuya, no del estandar."
+  exit 1
+fi
+
+echo "[OPS-07 n1] comprobado aqui: integridad y completitud verbatim, puente, fin de linea,"
+echo "            identidad del ejecutor, modo de mision,"
+echo "            barrido de secretos sobre el DIFF, catalogo (solo aviso)."
+
+PROY="$(ls proyecto-*.md 2>/dev/null | head -1 || true)"
+TESTS=""
+[ -n "$PROY" ] && TESTS="$(sed -n 's/^tests:[[:space:]]*//p' "$PROY" | head -1)"
+
+echo "[OPS-07 n1] NO comprobado aqui, y el job 'certificacion' SI lo hara:"
+echo "            . catalogo de interfaz, como bloqueo y no como aviso"
+echo "            . barrido de secretos sobre el ARBOL COMPLETO, no solo el diff"
+echo "              —y el cierre de mision lo corre en local antes de commitear—"
+if [ -z "$PROY" ]; then
+  echo "            . la DoD del proyecto: no hay proyecto-<nombre>.md, y el job"
+  echo "              fallara por eso. Modo genesis no exime al nivel 2."
+else
+  case "$TESTS" in
+    ""|"no existe"|"ninguno"|"<"*)
+      echo "            . la DoD del proyecto: $PROY no declara un 'tests:' ejecutable."
+      echo "              El job fallara salvo excepcion vigente declarada ahi mismo." ;;
+    *)
+      echo "            . la DoD que $PROY declara:"
+      echo "                $TESTS" ;;
+  esac
+fi
+
+echo "[OPS-07 n1] Esto NO es certificacion. La certificacion vive fuera del repo."
+exit 0

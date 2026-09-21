@@ -1,0 +1,92 @@
+# OPS-07 NIVEL 2 — LA CERTIFICACION.
+#
+# Viaja verbatim a todo proyecto que adopte el estandar, y corre lo mismo en los
+# dos: un PISO que no es declarable, y la DoD que el proyecto declara. El estandar
+# no se exime — tiene su proyecto-estandar.md como cualquiera.
+#
+# Este archivo es la RAIZ DE CONFIANZA. Ver RAIZ-DE-CONFIANZA.md: su proteccion NO
+# vive aqui, vive en la configuracion de la plataforma.
+
+name: certificacion
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  certificacion:
+    name: certificacion
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- PISO. Ningun campo de la capa de proyecto lo quita ni lo sustituye. ---
+      - name: Piso · puente @AGENTS.md (EST-01)
+        run: |
+          test -f CLAUDE.md || { echo "falta CLAUDE.md"; exit 1; }
+          grep -q '^@AGENTS\.md' CLAUDE.md || {
+            echo "CLAUDE.md no importa AGENTS.md."
+            echo "Debe ser import, no copia: git tiene que guardar el @import."
+            exit 1; }
+          echo "puente presente y guardado como import"
+
+      - name: Piso · nada sobra bajo el andamiaje
+        run: bash ./verificadores/andamiaje.sh
+
+      - name: Piso · fin de linea del andamiaje
+        run: bash ./verificadores/lineas.sh
+
+      - name: Piso · barrido de secretos (regla sin excepcion)
+        run: bash ./verificadores/secretos.sh
+
+      - name: Piso · catalogo de interfaz
+        run: bash ./verificadores/catalogo.sh
+
+      # --- DoD DEL PROYECTO. La declara el proyecto; el piso no la reemplaza. ---
+      - name: DoD declarada en proyecto-<nombre>.md
+        run: |
+          PROY="$(ls proyecto-*.md 2>/dev/null | head -1 || true)"
+          [ -n "$PROY" ] || { echo "FALLA: no hay proyecto-<nombre>.md"; exit 1; }
+          campo() { sed -n "s/^$1:[[:space:]]*//p" "$2" | head -1; }
+          TESTS="$(campo tests "$PROY")"
+          EXC="$(campo dod-excepcion "$PROY")"
+          DESDE="$(campo dod-excepcion-desde "$PROY")"
+          REV="$(campo dod-revision "$PROY")"
+          case "$TESTS" in
+            ""|"no existe"|"ninguno"|"<"*)
+              if [ -z "$EXC" ] || [ -z "$REV" ] || [ -z "$DESDE" ]; then
+                echo "FALLA: '$PROY' no declara un 'tests:' ejecutable y la excepcion esta incompleta."
+                echo "       Se exigen 'dod-excepcion:', 'dod-excepcion-desde:' y 'dod-revision:' (AAAA-MM-DD) [D-C41]."
+                exit 1
+              fi
+              hoy="$(date -u +%F)"
+              if [ "$REV" \< "$hoy" ]; then
+                echo "FALLA: la excepcion de DoD vencio el $REV (hoy $hoy)."
+                echo "       Se revisa: o el proyecto declara una DoD ejecutable, o se renueva"
+                echo "       moviendo 'dod-revision:' — dejando 'dod-excepcion-desde:' intacta."
+                exit 1
+              fi
+              echo "EXCEPCION DE DoD — abierta el $DESDE, vigente hasta $REV"
+              echo "  motivo: $EXC"
+              echo "ESTE JOB NO CORRIO DoD DE PROYECTO. El verde cubre solo el piso."
+              exit 0 ;;
+          esac
+          echo "DoD declarada por el proyecto: $TESTS"
+          eval "$TESTS"
+
+      - name: Veredicto — acotado a lo que este job realmente verifico
+        run: |
+          echo "Verde significa DOS cosas, y solo dos:"
+          echo "  1. El piso paso: puente @AGENTS.md, fin de linea, secretos, catalogo."
+          echo "  2. El proyecto corrio lo que EL MISMO declaro en 'tests:' —o declaro"
+          echo "     una excepcion vigente, y entonces el paso anterior lo dijo."
+          echo
+          echo "NO significa que esa declaracion sea suficiente. 'tests:' vive en el"
+          echo "repositorio y un commit puede debilitarlo: la raiz de confianza cubre"
+          echo "este workflow, no ese campo. Lo que impide que se debilite en silencio"
+          echo "es el camino obligatorio por PR, que es un acto humano."

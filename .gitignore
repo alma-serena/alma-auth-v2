@@ -1,0 +1,13 @@
+/vendor/
+composer.lock
+.phpunit.cache/
+.phpunit.result.cache
+.idea/
+.vscode/
+*.log
+.env
+.env.local
+.env.production
+.env.staging
+storage/oauth-private.key
+storage/oauth-public.key
