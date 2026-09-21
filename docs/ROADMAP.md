@@ -18,14 +18,16 @@ Condiciones pre-firmadas para abrir misiones futuras. Lo que no está aquí
 | AUTH-09 | Este roadmap | MIS-010 |
 | AUTH-10 | RBAC + matriz de revocación | MIS-011 |
 | OAuth social | Vínculo + login (verificador inyectable) | MIS-012 |
+| OAuth Google | Adaptador userinfo/tokeninfo | MIS-013 |
 
 ## Siguiente acordado
 
-Ninguno pendiente del catálogo AUTH-01…10 ni OAuth social base. Lo nuevo entra por REQ propio.
+Ninguno pendiente. Lo nuevo entra por REQ propio.
 
 ## Diferido (requiere REQ nuevo)
 
-- **Adaptador Socialite / SDK Google-Apple** en el host (el paquete solo exige `OAuthIdentityVerifier`).
+- **Adaptadores Apple / GitHub** (mismo patrón que Google).
+- **Adaptador Socialite** opcional en el host (ya no hace falta para Google).
 - **Notificaciones** (email/push al marcar dispositivo o login nuevo): el host observa audit.
 - **Paquete `alma/auth-legal-cl`**: textos Ley 21.719 viven en el host; AUTH-08 solo persiste consentimiento.
 - **Autoregistro vía OAuth** / autovínculo por email: explícitamente fuera (vínculo solo con step-up).

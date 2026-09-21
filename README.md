@@ -16,6 +16,7 @@ Paquete Composer headless de autenticación para hosts Laravel.
 | AUTH-09 roadmap | MIS-010 / REQ-010 |
 | AUTH-10 RBAC + revocación | MIS-011 / REQ-011 |
 | OAuth social | MIS-012 / REQ-012 |
+| OAuth Google (adaptador) | MIS-013 / REQ-013 |
 | Consumidor de graduación | pendiente |
 
 Roadmap detallado: [docs/ROADMAP.md](docs/ROADMAP.md).
@@ -32,7 +33,9 @@ Roadmap detallado: [docs/ROADMAP.md](docs/ROADMAP.md).
 9. Trusted devices: `ALMA_AUTH_TRUSTED_DEVICE_TTL_DAYS` (default 90).
 10. Modelo de usuario: implementar `setAuthPassword()` (AUTH-10).
 11. Sembrar RBAC: `$auth->syncRbacCatalog()` tras migrar (o en boot del host).
-12. OAuth: registrar implementación de `OAuthIdentityVerifier` (Socialite/SDK); default rechaza tokens.
+12. OAuth: con `ALMA_AUTH_GOOGLE_CLIENT_ID` el paquete activa el adaptador Google solo.
+    Otros proveedores: implementá `OAuthIdentityVerifier` o esperá adaptadores futuros.
+    Sin client_id, el default rechaza tokens.
 
 ## Rutas (`api/alma-auth`)
 
