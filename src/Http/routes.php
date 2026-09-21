@@ -12,6 +12,7 @@ Route::prefix('api/alma-auth')->group(function () {
         Route::post('/refresh', [AuthController::class, 'refresh']);
         Route::post('/passkeys/login/options', [AuthController::class, 'passkeyLoginOptions']);
         Route::post('/passkeys/login', [AuthController::class, 'passkeyLogin']);
+        Route::post('/oauth/login', [AuthController::class, 'oauthLogin']);
     });
 
     Route::middleware(['auth:sanctum', CheckAbilities::class.':2fa:verify'])->group(function () {
@@ -25,6 +26,7 @@ Route::prefix('api/alma-auth')->group(function () {
         Route::get('/legal/consents', [AuthController::class, 'listConsents']);
         Route::post('/legal/consent', [AuthController::class, 'recordConsent']);
         Route::get('/roles', [AuthController::class, 'listRoles']);
+        Route::get('/oauth/links', [AuthController::class, 'listOAuthLinks']);
     });
 
     Route::middleware(['auth:sanctum', CheckAbilities::class.':*', 'alma.recent'])->group(function () {
@@ -38,5 +40,7 @@ Route::prefix('api/alma-auth')->group(function () {
         Route::delete('/devices/{device}', [AuthController::class, 'revokeTrustedDevice']);
         Route::post('/password/change', [AuthController::class, 'changePassword']);
         Route::post('/sessions/revoke', [AuthController::class, 'revokeSessions']);
+        Route::post('/oauth/link', [AuthController::class, 'oauthLink']);
+        Route::delete('/oauth/{provider}', [AuthController::class, 'oauthUnlink']);
     });
 });

@@ -15,6 +15,7 @@ Paquete Composer headless de autenticación para hosts Laravel.
 | AUTH-08 consentimiento legal | MIS-009 / REQ-009 |
 | AUTH-09 roadmap | MIS-010 / REQ-010 |
 | AUTH-10 RBAC + revocación | MIS-011 / REQ-011 |
+| OAuth social | MIS-012 / REQ-012 |
 | Consumidor de graduación | pendiente |
 
 Roadmap detallado: [docs/ROADMAP.md](docs/ROADMAP.md).
@@ -31,6 +32,7 @@ Roadmap detallado: [docs/ROADMAP.md](docs/ROADMAP.md).
 9. Trusted devices: `ALMA_AUTH_TRUSTED_DEVICE_TTL_DAYS` (default 90).
 10. Modelo de usuario: implementar `setAuthPassword()` (AUTH-10).
 11. Sembrar RBAC: `$auth->syncRbacCatalog()` tras migrar (o en boot del host).
+12. OAuth: registrar implementación de `OAuthIdentityVerifier` (Socialite/SDK); default rechaza tokens.
 
 ## Rutas (`api/alma-auth`)
 
@@ -40,6 +42,7 @@ Roadmap detallado: [docs/ROADMAP.md](docs/ROADMAP.md).
 | POST | `/refresh` | — (body: `refresh_token`) |
 | POST | `/passkeys/login/options` | — (throttle 5/min) |
 | POST | `/passkeys/login` | — (throttle 5/min) |
+| POST | `/oauth/login` | — (throttle 5/min) |
 | POST | `/2fa/verify` | Sanctum ability `2fa:verify` |
 | POST | `/step-up` | Sanctum ability `*` |
 | GET | `/passkeys` | `*` |
@@ -47,6 +50,7 @@ Roadmap detallado: [docs/ROADMAP.md](docs/ROADMAP.md).
 | GET | `/legal/consents` | `*` |
 | POST | `/legal/consent` | `*` |
 | GET | `/roles` | `*` |
+| GET | `/oauth/links` | `*` |
 | POST | `/2fa/enroll` | `*` + step-up reciente |
 | POST | `/2fa/confirm` | `*` + step-up reciente |
 | POST | `/email/change` | `*` + step-up reciente |
@@ -57,6 +61,8 @@ Roadmap detallado: [docs/ROADMAP.md](docs/ROADMAP.md).
 | DELETE | `/devices/{id}` | `*` + step-up reciente |
 | POST | `/password/change` | `*` + step-up reciente |
 | POST | `/sessions/revoke` | `*` + step-up reciente |
+| POST | `/oauth/link` | `*` + step-up reciente |
+| DELETE | `/oauth/{provider}` | `*` + step-up reciente |
 
 Login, `2fa/verify` y `passkeys/login` exitosos devuelven `token` + `refresh_token`. El login con passkey es sesión plena (no exige TOTP adicional). Con `trust_device=true` en `2fa/verify`, el fingerprint omite TOTP en logins siguientes hasta expirar o revocar.
 

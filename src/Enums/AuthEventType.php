@@ -30,4 +30,7 @@ enum AuthEventType: string
     case SessionRevoked = 'session.revoked';
     case PasswordChanged = 'password.changed';
     case RolesChanged = 'roles.changed';
+    case OAuthLinked = 'oauth.linked';
+    case OAuthUnlinked = 'oauth.unlinked';
+    case OAuthLoginFailed = 'oauth.login_failed';
 }

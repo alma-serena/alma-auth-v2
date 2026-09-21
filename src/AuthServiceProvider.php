@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Alma\Auth;
 
 use Alma\Auth\Contracts\AuditLogger;
+use Alma\Auth\Contracts\OAuthIdentityVerifier;
 use Alma\Auth\Contracts\PasskeyCeremony;
 use Alma\Auth\Contracts\RbacPolicy;
 use Alma\Auth\Contracts\RefreshTokenRepository;
 use Alma\Auth\Http\Middleware\RequiresRecentAuth;
 use Alma\Auth\Services\AuthService;
 use Alma\Auth\Services\EloquentRefreshTokenRepository;
+use Alma\Auth\Services\RejectingOAuthIdentityVerifier;
 use Alma\Auth\Services\WebAuthnPasskeyCeremony;
 use Illuminate\Routing\Router;
 use Illuminate\Support\ServiceProvider;
@@ -22,6 +24,7 @@ final class AuthServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(__DIR__.'/../config/alma-auth.php', 'alma-auth');
         $this->app->singleton(RefreshTokenRepository::class, EloquentRefreshTokenRepository::class);
         $this->app->singleton(PasskeyCeremony::class, WebAuthnPasskeyCeremony::class);
+        $this->app->singleton(OAuthIdentityVerifier::class, RejectingOAuthIdentityVerifier::class);
         $this->app->singleton(AuthService::class);
         $this->app->singleton(AuditLogger::class, fn ($app) => $app->make(AuthService::class));
         $this->app->singleton(RbacPolicy::class, fn ($app) => $app->make(AuthService::class));
