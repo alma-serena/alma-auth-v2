@@ -34,4 +34,6 @@ return [
     ))),
     'passkey_timeout_ms' => (int) env('ALMA_AUTH_PASSKEY_TIMEOUT_MS', 60_000),
     'passkey_challenge_ttl_minutes' => (int) env('ALMA_AUTH_PASSKEY_CHALLENGE_TTL_MINUTES', 5),
+
+    'trusted_device_ttl_days' => (int) env('ALMA_AUTH_TRUSTED_DEVICE_TTL_DAYS', 90),
 ];

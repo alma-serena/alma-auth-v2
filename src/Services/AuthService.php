@@ -12,6 +12,7 @@ use Alma\Auth\Enums\AuthEventType;
 use Alma\Auth\Models\AuditLog;
 use Alma\Auth\Models\EmailChangeRequest;
 use Alma\Auth\Models\Passkey;
+use Alma\Auth\Models\TrustedDevice;
 use Alma\Auth\Support\Base64Url;
 use Alma\Auth\ValueObjects\LoginResult;
 use Alma\Auth\ValueObjects\RefreshRotationResult;
@@ -30,8 +31,12 @@ final class AuthService implements AuditLogger
         private PasskeyCeremony $passkeyCeremony,
     ) {}
 
-    public function attemptLogin(string $email, string $password, string $ip = '0.0.0.0'): LoginResult
-    {
+    public function attemptLogin(
+        string $email,
+        string $password,
+        string $ip = '0.0.0.0',
+        string $deviceFingerprint = '',
+    ): LoginResult {
         if ($this->isLockedOut($email, $ip)) {
             $this->consumeDummyHash($password);
             $this->log(AuthEventType::LoginFailed->value, [
@@ -72,6 +77,20 @@ final class AuthService implements AuditLogger
         $this->clearLockout($email, $ip);
 
         if ($user->hasTwoFactorEnabled()) {
+            if ($this->touchTrustedDevice($user, $deviceFingerprint)) {
+                $this->log(AuthEventType::LoginSucceeded->value, [
+                    'user_id' => $user->getAuthIdentifier(),
+                    'ip' => $ip,
+                    'requires_2fa' => false,
+                    'trusted_device' => true,
+                ]);
+                $this->log(AuthEventType::TrustedDeviceUsed->value, [
+                    'user_id' => $user->getAuthIdentifier(),
+                ]);
+
+                return LoginResult::authenticated($user);
+            }
+
             $this->log(AuthEventType::LoginSucceeded->value, [
                 'user_id' => $user->getAuthIdentifier(),
                 'ip' => $ip,
@@ -558,6 +577,119 @@ final class AuthService implements AuditLogger
         ]);
 
         return true;
+    }
+
+    public function markTrustedDevice(
+        AuthenticatableUser $user,
+        string $fingerprint,
+        ?string $name = null,
+    ): ?TrustedDevice {
+        $fingerprint = trim($fingerprint);
+        if ($fingerprint === '') {
+            return null;
+        }
+
+        $ttl = (int) config('alma-auth.trusted_device_ttl_days', 90);
+        $expires = now()->addDays(max($ttl, 1));
+
+        /** @var TrustedDevice $device */
+        $device = TrustedDevice::query()->updateOrCreate(
+            [
+                'user_id' => $user->getAuthIdentifier(),
+                'fingerprint' => $fingerprint,
+            ],
+            [
+                'name' => $name,
+                'last_used_at' => now(),
+                'expires_at' => $expires,
+                'revoked_at' => null,
+            ],
+        );
+
+        $this->log(AuthEventType::TrustedDeviceMarked->value, [
+            'user_id' => $user->getAuthIdentifier(),
+            'device_id' => $device->id,
+        ]);
+
+        return $device;
+    }
+
+    public function isTrustedDevice(AuthenticatableUser $user, string $fingerprint): bool
+    {
+        return $this->findActiveTrustedDevice($user, $fingerprint) !== null;
+    }
+
+    /**
+     * @return list<array{id: int, name: ?string, fingerprint: string, last_used_at: ?string, expires_at: ?string}>
+     */
+    public function listTrustedDevices(AuthenticatableUser $user): array
+    {
+        return TrustedDevice::query()
+            ->where('user_id', $user->getAuthIdentifier())
+            ->whereNull('revoked_at')
+            ->where('expires_at', '>', now())
+            ->orderBy('id')
+            ->get()
+            ->map(static fn (TrustedDevice $d): array => [
+                'id' => (int) $d->id,
+                'name' => $d->name,
+                'fingerprint' => $d->fingerprint,
+                'last_used_at' => $d->last_used_at?->toIso8601String(),
+                'expires_at' => $d->expires_at?->toIso8601String(),
+            ])
+            ->all();
+    }
+
+    public function revokeTrustedDevice(AuthenticatableUser $user, int $deviceId): bool
+    {
+        /** @var TrustedDevice|null $device */
+        $device = TrustedDevice::query()
+            ->where('user_id', $user->getAuthIdentifier())
+            ->where('id', $deviceId)
+            ->whereNull('revoked_at')
+            ->first();
+
+        if ($device === null) {
+            return false;
+        }
+
+        $device->forceFill(['revoked_at' => now()])->save();
+        $this->log(AuthEventType::TrustedDeviceRevoked->value, [
+            'user_id' => $user->getAuthIdentifier(),
+            'device_id' => $device->id,
+        ]);
+
+        return true;
+    }
+
+    private function touchTrustedDevice(AuthenticatableUser $user, string $fingerprint): bool
+    {
+        $device = $this->findActiveTrustedDevice($user, $fingerprint);
+        if ($device === null) {
+            return false;
+        }
+
+        $device->forceFill(['last_used_at' => now()])->save();
+
+        return true;
+    }
+
+    private function findActiveTrustedDevice(AuthenticatableUser $user, string $fingerprint): ?TrustedDevice
+    {
+        $fingerprint = trim($fingerprint);
+        if ($fingerprint === '') {
+            return null;
+        }
+
+        /** @var TrustedDevice|null $device */
+        $device = TrustedDevice::query()
+            ->where('user_id', $user->getAuthIdentifier())
+            ->where('fingerprint', $fingerprint)
+            ->whereNull('revoked_at')
+            ->where('expires_at', '>', now())
+            ->first();
+
+        return $device;
     }
 
     /**

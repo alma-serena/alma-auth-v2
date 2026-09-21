@@ -27,6 +27,7 @@ final class AuthController extends Controller
             $credentials['email'],
             $credentials['password'],
             $request->ip() ?? '0.0.0.0',
+            $credentials['device_fingerprint'] ?? '',
         );
 
         if (! $result->success || $result->user === null) {
@@ -56,6 +57,8 @@ final class AuthController extends Controller
         $data = $request->validate([
             'code' => 'required|string|size:6',
             'device_fingerprint' => 'sometimes|string|max:255',
+            'trust_device' => 'sometimes|boolean',
+            'device_name' => 'sometimes|nullable|string|max:255',
         ]);
 
         /** @var AuthenticatableUser $user */
@@ -65,11 +68,16 @@ final class AuthController extends Controller
             return response()->json(['status' => 'invalid_code'], 401);
         }
 
+        $fingerprint = $data['device_fingerprint'] ?? '';
+        if (($data['trust_device'] ?? false) === true) {
+            $this->auth->markTrustedDevice($user, $fingerprint, $data['device_name'] ?? null);
+        }
+
         $user->tokens()->where('id', $user->currentAccessToken()?->getKey())->delete();
 
         return $this->authenticatedResponse(
             $user,
-            $data['device_fingerprint'] ?? '',
+            $fingerprint,
             $request->ip(),
         );
     }
@@ -286,6 +294,29 @@ final class AuthController extends Controller
         }
 
         return response()->json(['status' => 'passkey_revoked']);
+    }
+
+    public function listTrustedDevices(Request $request): JsonResponse
+    {
+        /** @var AuthenticatableUser $user */
+        $user = $request->user();
+
+        return response()->json([
+            'status' => 'ok',
+            'devices' => $this->auth->listTrustedDevices($user),
+        ]);
+    }
+
+    public function revokeTrustedDevice(Request $request, int $device): JsonResponse
+    {
+        /** @var AuthenticatableUser $user */
+        $user = $request->user();
+
+        if (! $this->auth->revokeTrustedDevice($user, $device)) {
+            return response()->json(['status' => 'device_not_found'], 404);
+        }
+
+        return response()->json(['status' => 'device_revoked']);
     }
 
     private function authenticatedResponse(

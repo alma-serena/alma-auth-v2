@@ -11,7 +11,8 @@ Paquete Composer headless de autenticación para hosts Laravel.
 | AUTH-07 audit HMAC | MIS-005 / REQ-005 |
 | AUTH-06 step-up + email change | MIS-006 / REQ-006 |
 | AUTH-04 passkeys (WebAuthn) | MIS-007 / REQ-007 |
-| AUTH-05, 08…10 | pendientes |
+| AUTH-05 trusted devices | MIS-008 / REQ-008 |
+| AUTH-08…10 | pendientes |
 | Consumidor de graduación | pendiente |
 
 ## Requisitos del host
@@ -19,10 +20,11 @@ Paquete Composer headless de autenticación para hosts Laravel.
 1. Modelo de usuario que implemente `Alma\Auth\Contracts\AuthenticatableUser` y use `Laravel\Sanctum\HasApiTokens`.
 2. Configurar `ALMA_AUTH_USER_MODEL` (o `config/alma-auth.php`).
 3. Columnas `two_factor_secret` (text nullable) y `two_factor_enabled` (bool) en usuarios.
-5. Correr migraciones del paquete (`alma_auth_refresh_tokens`, `alma_auth_audit`, `alma_auth_email_changes`, `alma_auth_passkeys`).
+5. Correr migraciones del paquete (`alma_auth_refresh_tokens`, `alma_auth_audit`, `alma_auth_email_changes`, `alma_auth_passkeys`, `alma_auth_trusted_devices`).
 6. Publicar config: `php artisan vendor:publish --tag=alma-auth-config`
 7. Definir `ALMA_AUTH_HMAC_KEY` (≥ 32 bytes) en el entorno del host.
 8. Para passkeys: `ALMA_AUTH_PASSKEY_RP_ID`, `ALMA_AUTH_PASSKEY_ORIGINS` (orígenes con esquema, separados por coma).
+9. Trusted devices: `ALMA_AUTH_TRUSTED_DEVICE_TTL_DAYS` (default 90).
 
 ## Rutas (`api/alma-auth`)
 
@@ -35,6 +37,7 @@ Paquete Composer headless de autenticación para hosts Laravel.
 | POST | `/2fa/verify` | Sanctum ability `2fa:verify` |
 | POST | `/step-up` | Sanctum ability `*` |
 | GET | `/passkeys` | `*` |
+| GET | `/devices` | `*` |
 | POST | `/2fa/enroll` | `*` + step-up reciente |
 | POST | `/2fa/confirm` | `*` + step-up reciente |
 | POST | `/email/change` | `*` + step-up reciente |
@@ -42,8 +45,9 @@ Paquete Composer headless de autenticación para hosts Laravel.
 | POST | `/passkeys/register/options` | `*` + step-up reciente |
 | POST | `/passkeys/register` | `*` + step-up reciente |
 | DELETE | `/passkeys/{id}` | `*` + step-up reciente |
+| DELETE | `/devices/{id}` | `*` + step-up reciente |
 
-Login, `2fa/verify` y `passkeys/login` exitosos devuelven `token` + `refresh_token`. El login con passkey es sesión plena (no exige TOTP adicional).
+Login, `2fa/verify` y `passkeys/login` exitosos devuelven `token` + `refresh_token`. El login con passkey es sesión plena (no exige TOTP adicional). Con `trust_device=true` en `2fa/verify`, el fingerprint omite TOTP en logins siguientes hasta expirar o revocar.
 
 ## Comandos
 

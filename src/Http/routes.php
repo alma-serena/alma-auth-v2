@@ -21,6 +21,7 @@ Route::prefix('api/alma-auth')->group(function () {
     Route::middleware(['auth:sanctum', CheckAbilities::class.':*'])->group(function () {
         Route::post('/step-up', [AuthController::class, 'stepUp']);
         Route::get('/passkeys', [AuthController::class, 'listPasskeys']);
+        Route::get('/devices', [AuthController::class, 'listTrustedDevices']);
     });
 
     Route::middleware(['auth:sanctum', CheckAbilities::class.':*', 'alma.recent'])->group(function () {
@@ -31,5 +32,6 @@ Route::prefix('api/alma-auth')->group(function () {
         Route::post('/passkeys/register/options', [AuthController::class, 'passkeyRegisterOptions']);
         Route::post('/passkeys/register', [AuthController::class, 'passkeyRegister']);
         Route::delete('/passkeys/{passkey}', [AuthController::class, 'revokePasskey']);
+        Route::delete('/devices/{device}', [AuthController::class, 'revokeTrustedDevice']);
     });
 });
