@@ -12,7 +12,8 @@ Paquete Composer headless de autenticación para hosts Laravel.
 | AUTH-06 step-up + email change | MIS-006 / REQ-006 |
 | AUTH-04 passkeys (WebAuthn) | MIS-007 / REQ-007 |
 | AUTH-05 trusted devices | MIS-008 / REQ-008 |
-| AUTH-08…10 | pendientes |
+| AUTH-08 consentimiento legal | MIS-009 / REQ-009 |
+| AUTH-09…10 | pendientes |
 | Consumidor de graduación | pendiente |
 
 ## Requisitos del host
@@ -38,6 +39,8 @@ Paquete Composer headless de autenticación para hosts Laravel.
 | POST | `/step-up` | Sanctum ability `*` |
 | GET | `/passkeys` | `*` |
 | GET | `/devices` | `*` |
+| GET | `/legal/consents` | `*` |
+| POST | `/legal/consent` | `*` |
 | POST | `/2fa/enroll` | `*` + step-up reciente |
 | POST | `/2fa/confirm` | `*` + step-up reciente |
 | POST | `/email/change` | `*` + step-up reciente |

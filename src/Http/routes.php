@@ -22,6 +22,8 @@ Route::prefix('api/alma-auth')->group(function () {
         Route::post('/step-up', [AuthController::class, 'stepUp']);
         Route::get('/passkeys', [AuthController::class, 'listPasskeys']);
         Route::get('/devices', [AuthController::class, 'listTrustedDevices']);
+        Route::get('/legal/consents', [AuthController::class, 'listConsents']);
+        Route::post('/legal/consent', [AuthController::class, 'recordConsent']);
     });
 
     Route::middleware(['auth:sanctum', CheckAbilities::class.':*', 'alma.recent'])->group(function () {

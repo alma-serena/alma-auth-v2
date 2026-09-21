@@ -10,6 +10,7 @@ use Alma\Auth\Contracts\PasskeyCeremony;
 use Alma\Auth\Contracts\RefreshTokenRepository;
 use Alma\Auth\Enums\AuthEventType;
 use Alma\Auth\Models\AuditLog;
+use Alma\Auth\Models\ConsentRecord;
 use Alma\Auth\Models\EmailChangeRequest;
 use Alma\Auth\Models\Passkey;
 use Alma\Auth\Models\TrustedDevice;
@@ -660,6 +661,90 @@ final class AuthService implements AuditLogger
         ]);
 
         return true;
+    }
+
+    public function recordConsent(
+        AuthenticatableUser $user,
+        string $purpose,
+        string $policyVersion,
+        ?string $ip = null,
+    ): ?ConsentRecord {
+        $purpose = strtolower(trim($purpose));
+        $policyVersion = trim($policyVersion);
+        if ($purpose === '' || $policyVersion === '' || ! $this->isAllowedLegalPurpose($purpose)) {
+            return null;
+        }
+
+        $record = ConsentRecord::query()->create([
+            'user_id' => $user->getAuthIdentifier(),
+            'purpose' => $purpose,
+            'policy_version' => $policyVersion,
+            'ip_hash' => $ip !== null && $ip !== ''
+                ? hash('sha256', $ip.'|'.(string) config('alma-auth.hmac_key'))
+                : null,
+            'accepted_at' => now(),
+        ]);
+
+        $this->log(AuthEventType::LegalConsentRecorded->value, [
+            'user_id' => $user->getAuthIdentifier(),
+            'purpose' => $purpose,
+            'policy_version' => $policyVersion,
+            'consent_id' => $record->id,
+        ]);
+
+        return $record;
+    }
+
+    public function hasConsent(
+        AuthenticatableUser $user,
+        string $purpose,
+        ?string $minPolicyVersion = null,
+    ): bool {
+        $purpose = strtolower(trim($purpose));
+        $query = ConsentRecord::query()
+            ->where('user_id', $user->getAuthIdentifier())
+            ->where('purpose', $purpose)
+            ->orderByDesc('id');
+
+        /** @var ConsentRecord|null $latest */
+        $latest = $query->first();
+        if ($latest === null) {
+            return false;
+        }
+
+        if ($minPolicyVersion === null || $minPolicyVersion === '') {
+            return true;
+        }
+
+        return version_compare($latest->policy_version, $minPolicyVersion, '>=');
+    }
+
+    /**
+     * @return list<array{id: int, purpose: string, policy_version: string, accepted_at: ?string}>
+     */
+    public function listConsents(AuthenticatableUser $user): array
+    {
+        return ConsentRecord::query()
+            ->where('user_id', $user->getAuthIdentifier())
+            ->orderByDesc('id')
+            ->get(['id', 'purpose', 'policy_version', 'accepted_at'])
+            ->map(static fn (ConsentRecord $c): array => [
+                'id' => (int) $c->id,
+                'purpose' => $c->purpose,
+                'policy_version' => $c->policy_version,
+                'accepted_at' => $c->accepted_at?->toIso8601String(),
+            ])
+            ->all();
+    }
+
+    public function isAllowedLegalPurpose(string $purpose): bool
+    {
+        $allowed = config('alma-auth.legal_purposes', []);
+        if (! is_array($allowed) || $allowed === []) {
+            return false;
+        }
+
+        return in_array(strtolower(trim($purpose)), array_map('strtolower', $allowed), true);
     }
 
     private function touchTrustedDevice(AuthenticatableUser $user, string $fingerprint): bool

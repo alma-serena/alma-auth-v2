@@ -36,4 +36,16 @@ return [
     'passkey_challenge_ttl_minutes' => (int) env('ALMA_AUTH_PASSKEY_CHALLENGE_TTL_MINUTES', 5),
 
     'trusted_device_ttl_days' => (int) env('ALMA_AUTH_TRUSTED_DEVICE_TTL_DAYS', 90),
+
+    /*
+    | Finalidades de consentimiento permitidas (AUTH-08). El host define el catálogo;
+    | los textos legales viven fuera del paquete.
+    */
+    'legal_purposes' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', (string) env(
+            'ALMA_AUTH_LEGAL_PURPOSES',
+            'privacy_policy,terms_of_service,marketing',
+        )),
+    ))),
 ];
