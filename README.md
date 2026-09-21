@@ -2,19 +2,23 @@
 
 Paquete Composer headless de autenticación para hosts Laravel del ecosistema Alma.
 
-Este repositorio nació con **`alma-standard` instalado** (opción B: repo nuevo;
-el histórico `alma-serena/alma-auth` queda aparte).
-
-## Estado
-
 | Pieza | Estado |
 |---|---|
-| Estándar ALMA (verbatim) | instalado |
-| Hook OPS-07 n1 | activo (`core.hooksPath=.githooks`) |
-| `proyecto-auth.md` | sí |
-| Modo de misión | `genesis` |
-| Código de producto | aún no — entra por REQ/misión |
-| Remoto + raíz de confianza | pendiente |
+| Estándar ALMA (`v0.1.5`) | instalado |
+| Hook OPS-07 n1 | activo |
+| Raíz de confianza | configurada en GitHub |
+| Scaffold Composer | MIS-001 / REQ-001 |
+| Primitivas AUTH | pendientes (REQ propios) |
+| Consumidor de graduación | pendiente |
+
+## Uso (cuando exista superficie)
+
+```bash
+composer require alma/auth
+```
+
+Hoy el paquete solo expone `Alma\Auth\AuthServiceProvider` vacío: las primitivas
+entran por misión, no por copia del árbol histórico.
 
 ## Lectura para agentes
 
@@ -23,7 +27,10 @@ el histórico `alma-serena/alma-auth` queda aparte).
 3. `.agents/rules/` y workflows según la misión
 4. `METODOLOGIA.md`
 
-## Instalación del estándar (ya hecha)
+## Comandos
 
-Ver `INSTALACION.md` en el repo `alma-standard` (no viaja). No editar archivos
-verbatim; excepciones solo en `proyecto-auth.md`.
+```
+composer install
+composer test
+composer style
+```

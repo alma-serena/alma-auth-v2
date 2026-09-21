@@ -24,29 +24,28 @@ código aquí sin REQ.
 ## Stack
 
 - **Lenguaje:** PHP ≥ 8.3
-- **Framework de host:** Laravel (paquete vía Orchestra Testbench en pruebas)
-- **Auth base:** Laravel Sanctum ^4
-- **2FA:** pragmarx/google2fa
+- **Framework de host:** Laravel (el paquete depende de `illuminate/support`)
+- **Auth base (planificado, no en génesis):** Laravel Sanctum ^4 + pragmarx/google2fa
 - **Sin frontend propio** — headless; la UI vive en el consumidor
-- **Dev:** PHPUnit 11, Orchestra Testbench 9, Laravel Pint, PHPStan
+- **Dev (génesis):** PHPUnit 11, Laravel Pint
+- **Dev (próximas misiones):** Orchestra Testbench, PHPStan — entran con el REQ que los necesite
+
+Sanctum/Testbench no están en `composer.json` aún: Composer bloquea Laravel 11
+con advisories abiertos (`block-insecure`). La génesis no abre esa puerta; la
+primera primitiva AUTH lo resolverá con versiones no afectadas o excepción
+declarada.
 
 ## Comandos ejecutables
 
 ```
-setup:  composer install
+setup:  composer install --no-interaction
 correr: no aplica — es biblioteca
-tests:  no existe
-lint:   no existe
+tests:  composer install --no-interaction && composer test
+lint:   composer install --no-interaction && composer style
 ```
 
-La DoD ejecutable (`composer test` / `composer style`) entra al cerrar la misión de
-génesis, cuando exista `composer.json`. Hasta entonces:
-
-```
-dod-excepcion: árbol de producto aún no existe; sin Composer no hay DoD corrible
-dod-excepcion-desde: 2026-09-21
-dod-revision: 2026-10-05
-```
+`composer analyse` (PHPStan) es DoD de backend del anexo cuando haya superficie
+analizable comprometida; aún no está en el campo `lint:`.
 
 ## Catálogo de interfaz
 
@@ -66,7 +65,7 @@ anexo solo fallan si **existen** y no están declaradas. Hoy no existen.
 
 ```
 rutas_secretas: .env, .env.local, .env.production, .env.staging, storage/oauth-private.key, storage/oauth-public.key
-herramientas: git, bash, composer, php
+herramientas: git, bash, composer, php, gh
 ```
 
 `ALMA_AUTH_HMAC_KEY` es variable de entorno del consumidor/host, no una ruta de este
@@ -77,19 +76,20 @@ deriva (red, escritura, gasto) y no se afirma inocuidad.
 
 ## Excepciones declaradas
 
-- **Qué:** este repositorio aún no tiene raíz de confianza (OPS-07 nivel 2) en
-  GitHub. · **Por qué:** el remoto `alma-serena/alma-auth-v2` no está creado; la
-  instalación local precede al ancla externa. · **Qué lo compensa:** nivel 1
-  (hook + verificadores) activo; ninguna declaración de conformidad hasta push +
-  `certificacion` en verde. · **Cuándo se revisa:** al crear el remoto y aplicar
-  `RAIZ-DE-CONFIANZA.md`.
+- **Qué:** el repositorio es **público** aunque el histórico `alma-auth` era privado.
+  · **Por qué:** en cuenta personal, GitHub responde 403 a la protección de rama en
+  repos privados; sin visibilidad pública no hay raíz de confianza.
+  · **Qué lo compensa:** `RAIZ-DE-CONFIANZA.md` aplicada (`certificacion` requerida,
+  `enforce_admins`, PR obligatorio, `GITHUB_TOKEN` read-only).
+  · **Cuándo se revisa:** si el repo se muda a organización con protección en privado,
+  o si el dueño acepta excepción de nivel 2 y vuelve a privado.
 
 ## Notas de dominio
 
-- Modo de misión previsto tras el andamiaje de producto: **`paquete`**. Hoy:
-  `genesis` hasta que exista código de producto y el REQ de génesis cierre.
+- Modo de misión vigente tras MIS-001: **`paquete`**.
 - Contratos inyectables del paquete deben resolverse en el service provider
   (hallazgo histórico S2-11 del anexo Laravel).
 - Primitivas de referencia (AUTH-01…10) viven en la spec de plataforma / README
   del ciclo anterior; cada una entra por REQ propio, no por nostalgia del árbol
   viejo.
+- Remoto: https://github.com/alma-serena/alma-auth-v2
