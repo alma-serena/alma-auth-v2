@@ -22,4 +22,16 @@ return [
 
     'step_up_minutes' => (int) env('ALMA_AUTH_STEP_UP_MINUTES', 10),
     'email_change_ttl_minutes' => (int) env('ALMA_AUTH_EMAIL_CHANGE_TTL_MINUTES', 60),
+
+    /*
+    | Passkeys / WebAuthn (AUTH-04). Origins con esquema (http://localhost, https://app.example).
+    */
+    'passkey_rp_id' => env('ALMA_AUTH_PASSKEY_RP_ID', 'localhost'),
+    'passkey_rp_name' => env('ALMA_AUTH_PASSKEY_RP_NAME', 'ALMA Auth'),
+    'passkey_origins' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', (string) env('ALMA_AUTH_PASSKEY_ORIGINS', 'http://localhost')),
+    ))),
+    'passkey_timeout_ms' => (int) env('ALMA_AUTH_PASSKEY_TIMEOUT_MS', 60_000),
+    'passkey_challenge_ttl_minutes' => (int) env('ALMA_AUTH_PASSKEY_CHALLENGE_TTL_MINUTES', 5),
 ];

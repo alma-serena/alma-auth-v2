@@ -181,6 +181,113 @@ final class AuthController extends Controller
         return response()->json(['status' => 'email_changed']);
     }
 
+    public function passkeyRegisterOptions(Request $request): JsonResponse
+    {
+        /** @var AuthenticatableUser $user */
+        $user = $request->user();
+        $payload = $this->auth->beginPasskeyRegistration($user);
+
+        return response()->json([
+            'status' => 'ok',
+            'challenge_id' => $payload['challenge_id'],
+            'publicKey' => $payload['publicKey'],
+        ]);
+    }
+
+    public function passkeyRegister(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'challenge_id' => 'required|string',
+            'credential' => 'required|array',
+            'name' => 'sometimes|nullable|string|max:255',
+        ]);
+
+        /** @var AuthenticatableUser $user */
+        $user = $request->user();
+        $passkey = $this->auth->completePasskeyRegistration(
+            $user,
+            $data['challenge_id'],
+            $data['credential'],
+            $request->getHost(),
+            $data['name'] ?? null,
+        );
+
+        if ($passkey === null) {
+            return response()->json(['status' => 'passkey_registration_failed'], 422);
+        }
+
+        return response()->json([
+            'status' => 'passkey_registered',
+            'passkey' => [
+                'id' => $passkey->id,
+                'name' => $passkey->name,
+            ],
+        ]);
+    }
+
+    public function passkeyLoginOptions(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'email' => 'sometimes|nullable|email',
+        ]);
+
+        $payload = $this->auth->beginPasskeyLogin($data['email'] ?? null);
+
+        return response()->json([
+            'status' => 'ok',
+            'challenge_id' => $payload['challenge_id'],
+            'publicKey' => $payload['publicKey'],
+        ]);
+    }
+
+    public function passkeyLogin(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'challenge_id' => 'required|string',
+            'credential' => 'required|array',
+            'device_fingerprint' => 'sometimes|string|max:255',
+        ]);
+
+        $result = $this->auth->completePasskeyLogin(
+            $data['challenge_id'],
+            $data['credential'],
+            $request->getHost(),
+        );
+
+        if (! $result->success || $result->user === null) {
+            return response()->json(['status' => 'passkey_invalid'], 401);
+        }
+
+        return $this->authenticatedResponse(
+            $result->user,
+            $data['device_fingerprint'] ?? '',
+            $request->ip(),
+        );
+    }
+
+    public function listPasskeys(Request $request): JsonResponse
+    {
+        /** @var AuthenticatableUser $user */
+        $user = $request->user();
+
+        return response()->json([
+            'status' => 'ok',
+            'passkeys' => $this->auth->listPasskeys($user),
+        ]);
+    }
+
+    public function revokePasskey(Request $request, int $passkey): JsonResponse
+    {
+        /** @var AuthenticatableUser $user */
+        $user = $request->user();
+
+        if (! $this->auth->revokePasskey($user, $passkey)) {
+            return response()->json(['status' => 'passkey_not_found'], 404);
+        }
+
+        return response()->json(['status' => 'passkey_revoked']);
+    }
+
     private function authenticatedResponse(
         AuthenticatableUser $user,
         string $deviceFingerprint,

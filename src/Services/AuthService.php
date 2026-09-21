@@ -6,10 +6,13 @@ namespace Alma\Auth\Services;
 
 use Alma\Auth\Contracts\AuditLogger;
 use Alma\Auth\Contracts\AuthenticatableUser;
+use Alma\Auth\Contracts\PasskeyCeremony;
 use Alma\Auth\Contracts\RefreshTokenRepository;
 use Alma\Auth\Enums\AuthEventType;
 use Alma\Auth\Models\AuditLog;
 use Alma\Auth\Models\EmailChangeRequest;
+use Alma\Auth\Models\Passkey;
+use Alma\Auth\Support\Base64Url;
 use Alma\Auth\ValueObjects\LoginResult;
 use Alma\Auth\ValueObjects\RefreshRotationResult;
 use Illuminate\Support\Facades\Crypt;
@@ -24,6 +27,7 @@ final class AuthService implements AuditLogger
 
     public function __construct(
         private RefreshTokenRepository $refreshTokens,
+        private PasskeyCeremony $passkeyCeremony,
     ) {}
 
     public function attemptLogin(string $email, string $password, string $ip = '0.0.0.0'): LoginResult
@@ -314,6 +318,286 @@ final class AuthService implements AuditLogger
         ]);
 
         return true;
+    }
+
+    /**
+     * @return array{challenge_id: string, publicKey: array<string, mixed>}
+     */
+    public function beginPasskeyRegistration(AuthenticatableUser $user): array
+    {
+        $exclude = Passkey::query()
+            ->where('user_id', $user->getAuthIdentifier())
+            ->whereNull('revoked_at')
+            ->pluck('credential_id')
+            ->all();
+
+        $options = $this->passkeyCeremony->creationOptions(
+            (string) $user->getAuthIdentifier(),
+            $user->getEmailForAlmaAuth(),
+            $user->getEmailForAlmaAuth(),
+            $exclude,
+        );
+
+        return $this->storePasskeyChallenge('registration', $options, $user->getAuthIdentifier());
+    }
+
+    /**
+     * @param  array<string, mixed>  $clientCredential
+     */
+    public function completePasskeyRegistration(
+        AuthenticatableUser $user,
+        string $challengeId,
+        array $clientCredential,
+        string $originHost,
+        ?string $name = null,
+    ): ?Passkey {
+        $cached = $this->pullPasskeyChallenge($challengeId);
+        if ($cached === null
+            || ($cached['type'] ?? null) !== 'registration'
+            || (string) ($cached['user_id'] ?? '') !== (string) $user->getAuthIdentifier()
+        ) {
+            $this->log(AuthEventType::PasskeyAuthFailed->value, [
+                'user_id' => $user->getAuthIdentifier(),
+                'reason' => 'registration_challenge',
+            ]);
+
+            return null;
+        }
+
+        try {
+            $verified = $this->passkeyCeremony->verifyAttestation(
+                $clientCredential,
+                $cached['options'],
+                $originHost,
+            );
+        } catch (\Throwable) {
+            $this->log(AuthEventType::PasskeyAuthFailed->value, [
+                'user_id' => $user->getAuthIdentifier(),
+                'reason' => 'attestation',
+            ]);
+
+            return null;
+        }
+
+        $hash = hash('sha256', $verified['credential_id']);
+        if (Passkey::query()->where('credential_id_hash', $hash)->exists()) {
+            $this->log(AuthEventType::PasskeyAuthFailed->value, [
+                'user_id' => $user->getAuthIdentifier(),
+                'reason' => 'duplicate_credential',
+            ]);
+
+            return null;
+        }
+
+        $passkey = Passkey::query()->create([
+            'user_id' => $user->getAuthIdentifier(),
+            'credential_id' => $verified['credential_id'],
+            'credential_id_hash' => $hash,
+            'public_key' => $verified['public_key'],
+            'counter' => $verified['counter'],
+            'name' => $name,
+            'transports' => $verified['transports'],
+            'aaguid' => $verified['aaguid'],
+            'user_handle' => $verified['user_handle'],
+        ]);
+
+        $this->log(AuthEventType::PasskeyRegistered->value, [
+            'user_id' => $user->getAuthIdentifier(),
+            'passkey_id' => $passkey->id,
+        ]);
+
+        return $passkey;
+    }
+
+    /**
+     * @return array{challenge_id: string, publicKey: array<string, mixed>}
+     */
+    public function beginPasskeyLogin(?string $email = null): array
+    {
+        $allow = [];
+        $userId = null;
+
+        if ($email !== null && $email !== '') {
+            $user = $this->resolveUser($email);
+            if ($user !== null) {
+                $userId = $user->getAuthIdentifier();
+                $allow = Passkey::query()
+                    ->where('user_id', $userId)
+                    ->whereNull('revoked_at')
+                    ->pluck('credential_id')
+                    ->all();
+            } else {
+                // Anti-enumeración: allowCredentials sintéticos (mismo shape).
+                $allow = [Base64Url::encode(hash('sha256', 'alma-auth-fake-pk|'.strtolower($email), true))];
+            }
+        }
+
+        $options = $this->passkeyCeremony->requestOptions($allow);
+
+        return $this->storePasskeyChallenge('authentication', $options, $userId);
+    }
+
+    /**
+     * @param  array<string, mixed>  $clientCredential
+     */
+    public function completePasskeyLogin(
+        string $challengeId,
+        array $clientCredential,
+        string $originHost,
+    ): LoginResult {
+        $cached = $this->pullPasskeyChallenge($challengeId);
+        if ($cached === null || ($cached['type'] ?? null) !== 'authentication') {
+            $this->log(AuthEventType::PasskeyAuthFailed->value, [
+                'reason' => 'auth_challenge',
+            ]);
+
+            return LoginResult::invalid();
+        }
+
+        $credentialId = (string) ($clientCredential['id'] ?? '');
+        if ($credentialId === '') {
+            $this->log(AuthEventType::PasskeyAuthFailed->value, [
+                'reason' => 'missing_credential_id',
+            ]);
+
+            return LoginResult::invalid();
+        }
+
+        /** @var Passkey|null $passkey */
+        $passkey = Passkey::query()
+            ->where('credential_id_hash', hash('sha256', $credentialId))
+            ->whereNull('revoked_at')
+            ->first();
+
+        if ($passkey === null) {
+            $this->log(AuthEventType::PasskeyAuthFailed->value, [
+                'reason' => 'unknown_or_revoked',
+            ]);
+
+            return LoginResult::invalid();
+        }
+
+        try {
+            $verified = $this->passkeyCeremony->verifyAssertion(
+                $clientCredential,
+                $cached['options'],
+                [
+                    'credential_id' => $passkey->credential_id,
+                    'public_key' => $passkey->public_key,
+                    'counter' => $passkey->counter,
+                    'transports' => $passkey->transports ?? [],
+                    'aaguid' => $passkey->aaguid ?? '00000000-0000-0000-0000-000000000000',
+                    'user_handle' => $passkey->user_handle,
+                ],
+                $originHost,
+            );
+        } catch (\Throwable) {
+            $this->log(AuthEventType::PasskeyAuthFailed->value, [
+                'user_id' => $passkey->user_id,
+                'reason' => 'assertion',
+            ]);
+
+            return LoginResult::invalid();
+        }
+
+        $passkey->forceFill(['counter' => $verified['counter']])->save();
+
+        $user = $this->resolveUserById($passkey->user_id);
+        if ($user === null) {
+            $this->log(AuthEventType::PasskeyAuthFailed->value, [
+                'user_id' => $passkey->user_id,
+                'reason' => 'user_missing',
+            ]);
+
+            return LoginResult::invalid();
+        }
+
+        $this->log(AuthEventType::PasskeyAuthenticated->value, [
+            'user_id' => $user->getAuthIdentifier(),
+            'passkey_id' => $passkey->id,
+        ]);
+
+        return LoginResult::authenticated($user);
+    }
+
+    /**
+     * @return list<array{id: int, name: ?string, created_at: ?string}>
+     */
+    public function listPasskeys(AuthenticatableUser $user): array
+    {
+        return Passkey::query()
+            ->where('user_id', $user->getAuthIdentifier())
+            ->whereNull('revoked_at')
+            ->orderBy('id')
+            ->get(['id', 'name', 'created_at'])
+            ->map(static fn (Passkey $p): array => [
+                'id' => (int) $p->id,
+                'name' => $p->name,
+                'created_at' => $p->created_at?->toIso8601String(),
+            ])
+            ->all();
+    }
+
+    public function revokePasskey(AuthenticatableUser $user, int $passkeyId): bool
+    {
+        /** @var Passkey|null $passkey */
+        $passkey = Passkey::query()
+            ->where('user_id', $user->getAuthIdentifier())
+            ->where('id', $passkeyId)
+            ->whereNull('revoked_at')
+            ->first();
+
+        if ($passkey === null) {
+            return false;
+        }
+
+        $passkey->forceFill(['revoked_at' => now()])->save();
+        $this->log(AuthEventType::PasskeyRevoked->value, [
+            'user_id' => $user->getAuthIdentifier(),
+            'passkey_id' => $passkey->id,
+        ]);
+
+        return true;
+    }
+
+    /**
+     * @param  array<string, mixed>  $options
+     * @return array{challenge_id: string, publicKey: array<string, mixed>}
+     */
+    private function storePasskeyChallenge(string $type, array $options, int|string|null $userId): array
+    {
+        $challengeId = (string) Str::uuid();
+        $ttl = (int) config('alma-auth.passkey_challenge_ttl_minutes', 5);
+        cache()->put(
+            $this->passkeyChallengeKey($challengeId),
+            [
+                'type' => $type,
+                'user_id' => $userId,
+                'options' => $options,
+            ],
+            now()->addMinutes(max($ttl, 1)),
+        );
+
+        return [
+            'challenge_id' => $challengeId,
+            'publicKey' => $options,
+        ];
+    }
+
+    /**
+     * @return array{type: string, user_id: int|string|null, options: array<string, mixed>}|null
+     */
+    private function pullPasskeyChallenge(string $challengeId): ?array
+    {
+        $key = $this->passkeyChallengeKey($challengeId);
+        $cached = cache()->pull($key);
+
+        return is_array($cached) ? $cached : null;
+    }
+
+    private function passkeyChallengeKey(string $challengeId): string
+    {
+        return 'alma_auth_passkey_chal:'.$challengeId;
     }
 
     public function log(string $event, array $context = []): void
