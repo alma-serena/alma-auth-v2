@@ -8,7 +8,8 @@ Paquete Composer headless de autenticación para hosts Laravel.
 | AUTH-01 login + 2FA TOTP | MIS-002 / REQ-002 |
 | AUTH-02 refresh (familia + rotación) | MIS-003 / REQ-003 |
 | AUTH-03 lockout IP\|cuenta | MIS-004 / REQ-004 |
-| AUTH-04…10 | pendientes |
+| AUTH-07 audit HMAC | MIS-005 / REQ-005 |
+| AUTH-04…06, 08…10 | pendientes |
 | Consumidor de graduación | pendiente |
 
 ## Requisitos del host
@@ -16,8 +17,9 @@ Paquete Composer headless de autenticación para hosts Laravel.
 1. Modelo de usuario que implemente `Alma\Auth\Contracts\AuthenticatableUser` y use `Laravel\Sanctum\HasApiTokens`.
 2. Configurar `ALMA_AUTH_USER_MODEL` (o `config/alma-auth.php`).
 3. Columnas `two_factor_secret` (text nullable) y `two_factor_enabled` (bool) en usuarios.
-4. Correr migraciones del paquete (`alma_auth_refresh_tokens`).
-5. Publicar config: `php artisan vendor:publish --tag=alma-auth-config`
+5. Correr migraciones del paquete (`alma_auth_refresh_tokens`, `alma_auth_audit`).
+6. Publicar config: `php artisan vendor:publish --tag=alma-auth-config`
+7. Definir `ALMA_AUTH_HMAC_KEY` (≥ 32 bytes) en el entorno del host.
 
 ## Rutas (`api/alma-auth`)
 

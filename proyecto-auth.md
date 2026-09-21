@@ -63,8 +63,8 @@ rutas_secretas: .env, .env.local, .env.production, .env.staging, storage/oauth-p
 herramientas: git, bash, composer, php, gh
 ```
 
-`ALMA_AUTH_HMAC_KEY` es variable de entorno del consumidor/host, no una ruta de este
-árbol. No se versiona ningún valor de clave.
+`ALMA_AUTH_HMAC_KEY` es variable de entorno del host (≥ 32 bytes). No se versiona
+ningún valor de clave.
 
 `herramientas` incluye intérpretes de propósito general: el efecto externo se
 deriva (red, escritura, gasto) y no se afirma inocuidad.
