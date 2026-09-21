@@ -5,14 +5,21 @@ declare(strict_types=1);
 namespace Alma\Auth\Services;
 
 use Alma\Auth\Contracts\AuthenticatableUser;
+use Alma\Auth\Contracts\RefreshTokenRepository;
 use Alma\Auth\ValueObjects\LoginResult;
+use Alma\Auth\ValueObjects\RefreshRotationResult;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use PragmaRX\Google2FA\Google2FA;
 
 final class AuthService
 {
     private static ?string $dummyPasswordHash = null;
+
+    public function __construct(
+        private RefreshTokenRepository $refreshTokens,
+    ) {}
 
     public function attemptLogin(string $email, string $password): LoginResult
     {
@@ -78,6 +85,46 @@ final class AuthService
         return $this->verifyTotp(Crypt::decryptString($encrypted), $code);
     }
 
+    public function issueRefreshToken(
+        AuthenticatableUser $user,
+        string $deviceFingerprint = '',
+        ?string $ipAddress = null,
+    ): string {
+        $ttl = (int) config('alma-auth.refresh_token_ttl_days', 30);
+
+        return $this->refreshTokens->create([
+            'user_id' => $user->getAuthIdentifier(),
+            'family_id' => (string) Str::uuid(),
+            'device_fingerprint' => $deviceFingerprint !== '' ? $deviceFingerprint : null,
+            'ip_address' => $ipAddress,
+            'expires_at' => now()->addDays($ttl),
+            'family_created_at' => now(),
+        ]);
+    }
+
+    public function rotateRefreshToken(string $plainToken, string $deviceFingerprint = ''): RefreshRotationResult
+    {
+        $stored = $this->refreshTokens->findByPlainToken($plainToken);
+
+        if ($stored === null) {
+            return RefreshRotationResult::failed('invalid_refresh_token');
+        }
+
+        if ($stored->revoked) {
+            $this->refreshTokens->revokeFamily($stored->family_id);
+
+            return RefreshRotationResult::failed('refresh_reuse_detected');
+        }
+
+        try {
+            $newPlain = $this->refreshTokens->rotate($plainToken, $deviceFingerprint);
+
+            return RefreshRotationResult::ok($newPlain, $stored->user_id);
+        } catch (\RuntimeException $e) {
+            return RefreshRotationResult::failed($e->getMessage());
+        }
+    }
+
     private function resolveUser(string $email): ?AuthenticatableUser
     {
         /** @var class-string<AuthenticatableUser>|null $model */
@@ -87,6 +134,19 @@ final class AuthService
         }
 
         $user = $model::query()->where('email', $email)->first();
+
+        return $user instanceof AuthenticatableUser ? $user : null;
+    }
+
+    public function resolveUserById(int|string $id): ?AuthenticatableUser
+    {
+        /** @var class-string<AuthenticatableUser>|null $model */
+        $model = config('alma-auth.user_model');
+        if ($model === null || $model === '') {
+            throw new \RuntimeException('Config alma-auth.user_model is required.');
+        }
+
+        $user = $model::query()->find($id);
 
         return $user instanceof AuthenticatableUser ? $user : null;
     }

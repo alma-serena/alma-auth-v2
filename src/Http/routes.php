@@ -9,6 +9,7 @@ use Laravel\Sanctum\Http\Middleware\CheckAbilities;
 Route::prefix('api/alma-auth')->group(function () {
     Route::middleware('throttle:5,1')->group(function () {
         Route::post('/login', [AuthController::class, 'login']);
+        Route::post('/refresh', [AuthController::class, 'refresh']);
     });
 
     Route::middleware(['auth:sanctum', CheckAbilities::class.':2fa:verify'])->group(function () {
