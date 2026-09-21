@@ -81,4 +81,12 @@ return [
         'trim',
         explode(',', (string) env('ALMA_AUTH_OAUTH_PROVIDERS', 'google,apple,github')),
     ))),
+
+    /*
+    | Google (MIS-013). Si client_id está definido, el provider registra
+    | GoogleOAuthIdentityVerifier en el composite de OAuthIdentityVerifier.
+    */
+    'oauth_google' => [
+        'client_id' => env('ALMA_AUTH_GOOGLE_CLIENT_ID'),
+    ],
 ];
