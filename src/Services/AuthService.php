@@ -7,13 +7,17 @@ namespace Alma\Auth\Services;
 use Alma\Auth\Contracts\AuditLogger;
 use Alma\Auth\Contracts\AuthenticatableUser;
 use Alma\Auth\Contracts\PasskeyCeremony;
+use Alma\Auth\Contracts\RbacPolicy;
 use Alma\Auth\Contracts\RefreshTokenRepository;
 use Alma\Auth\Enums\AuthEventType;
 use Alma\Auth\Models\AuditLog;
 use Alma\Auth\Models\ConsentRecord;
 use Alma\Auth\Models\EmailChangeRequest;
 use Alma\Auth\Models\Passkey;
+use Alma\Auth\Models\Role;
+use Alma\Auth\Models\RolePermission;
 use Alma\Auth\Models\TrustedDevice;
+use Alma\Auth\Models\UserRole;
 use Alma\Auth\Support\Base64Url;
 use Alma\Auth\ValueObjects\LoginResult;
 use Alma\Auth\ValueObjects\RefreshRotationResult;
@@ -23,7 +27,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use PragmaRX\Google2FA\Google2FA;
 
-final class AuthService implements AuditLogger
+final class AuthService implements AuditLogger, RbacPolicy
 {
     private static ?string $dummyPasswordHash = null;
 
@@ -336,6 +340,8 @@ final class AuthService implements AuditLogger
             'user_id' => $user->getAuthIdentifier(),
             'new_email' => $pending->new_email,
         ]);
+
+        $this->revokeAllSessions($user, 'email_changed');
 
         return true;
     }
@@ -745,6 +751,201 @@ final class AuthService implements AuditLogger
         }
 
         return in_array(strtolower(trim($purpose)), array_map('strtolower', $allowed), true);
+    }
+
+    public function syncRbacCatalog(): void
+    {
+        $catalog = config('alma-auth.rbac.roles', []);
+        if (! is_array($catalog)) {
+            return;
+        }
+
+        DB::transaction(function () use ($catalog) {
+            $keepRoleIds = [];
+
+            foreach ($catalog as $name => $definition) {
+                if (! is_string($name) || $name === '') {
+                    continue;
+                }
+
+                /** @var Role $role */
+                $role = Role::query()->updateOrCreate(
+                    ['name' => $name],
+                    ['description' => is_array($definition) ? ($definition['description'] ?? null) : null],
+                );
+                $keepRoleIds[] = $role->id;
+
+                $permissions = is_array($definition) ? ($definition['permissions'] ?? []) : [];
+                RolePermission::query()->where('role_id', $role->id)->delete();
+
+                foreach ($permissions as $perm) {
+                    if (! is_array($perm)) {
+                        continue;
+                    }
+                    $resource = (string) ($perm['resource'] ?? '');
+                    $action = (string) ($perm['action'] ?? '');
+                    $scope = (string) ($perm['scope'] ?? 'own');
+                    if ($resource === '' || $action === '' || ! in_array($scope, ['own', 'any'], true)) {
+                        continue;
+                    }
+
+                    RolePermission::query()->create([
+                        'role_id' => $role->id,
+                        'resource' => $resource,
+                        'action' => $action,
+                        'scope' => $scope,
+                    ]);
+                }
+            }
+
+            if ($keepRoleIds !== []) {
+                Role::query()->whereNotIn('id', $keepRoleIds)->delete();
+            }
+        });
+    }
+
+    public function userHasPermission(
+        AuthenticatableUser $user,
+        string $resource,
+        string $action,
+        string $scope = 'own',
+    ): bool {
+        if (! $this->permissionExistsInCatalog($resource, $action, $scope)) {
+            return false;
+        }
+
+        return DB::table('alma_auth_user_roles as ur')
+            ->join('alma_auth_role_permissions as rp', 'ur.role_id', '=', 'rp.role_id')
+            ->where('ur.user_id', $user->getAuthIdentifier())
+            ->where('rp.resource', $resource)
+            ->where('rp.action', $action)
+            ->whereIn('rp.scope', [$scope, 'any'])
+            ->exists();
+    }
+
+    public function assignRole(AuthenticatableUser $user, string $role): void
+    {
+        $this->syncRbacCatalog();
+        /** @var Role|null $roleModel */
+        $roleModel = Role::query()->where('name', $role)->first();
+        if ($roleModel === null) {
+            throw new \InvalidArgumentException("Unknown role [{$role}].");
+        }
+
+        UserRole::query()->updateOrCreate(
+            [
+                'user_id' => $user->getAuthIdentifier(),
+                'role_id' => $roleModel->id,
+            ],
+            [],
+        );
+
+        $this->log(AuthEventType::RolesChanged->value, [
+            'user_id' => $user->getAuthIdentifier(),
+            'role' => $role,
+            'action' => 'assigned',
+        ]);
+
+        $this->revokeAllSessions($user, 'roles_changed');
+    }
+
+    public function revokeRole(AuthenticatableUser $user, string $role): void
+    {
+        /** @var Role|null $roleModel */
+        $roleModel = Role::query()->where('name', $role)->first();
+        if ($roleModel === null) {
+            return;
+        }
+
+        UserRole::query()
+            ->where('user_id', $user->getAuthIdentifier())
+            ->where('role_id', $roleModel->id)
+            ->delete();
+
+        $this->log(AuthEventType::RolesChanged->value, [
+            'user_id' => $user->getAuthIdentifier(),
+            'role' => $role,
+            'action' => 'revoked',
+        ]);
+
+        $this->revokeAllSessions($user, 'roles_changed');
+    }
+
+    public function rolesFor(AuthenticatableUser $user): array
+    {
+        return DB::table('alma_auth_user_roles as ur')
+            ->join('alma_auth_roles as r', 'ur.role_id', '=', 'r.id')
+            ->where('ur.user_id', $user->getAuthIdentifier())
+            ->orderBy('r.name')
+            ->pluck('r.name')
+            ->map(static fn ($n): string => (string) $n)
+            ->values()
+            ->all();
+    }
+
+    public function revokeAllSessions(AuthenticatableUser $user, string $reason = 'manual'): int
+    {
+        $refreshCount = $this->refreshTokens->revokeAllForUser($user->getAuthIdentifier());
+
+        $sanctumDeleted = 0;
+        if (method_exists($user, 'tokens')) {
+            $sanctumDeleted = (int) $user->tokens()->delete();
+        }
+
+        $this->log(AuthEventType::SessionRevoked->value, [
+            'user_id' => $user->getAuthIdentifier(),
+            'reason' => $reason,
+            'refresh_revoked' => $refreshCount,
+            'access_revoked' => $sanctumDeleted,
+        ]);
+
+        return $refreshCount + $sanctumDeleted;
+    }
+
+    public function changePassword(
+        AuthenticatableUser $user,
+        string $currentPassword,
+        string $newPassword,
+    ): bool {
+        if (! Hash::check($currentPassword, $user->getAuthPassword())) {
+            return false;
+        }
+
+        $user->setAuthPassword($newPassword);
+        $this->log(AuthEventType::PasswordChanged->value, [
+            'user_id' => $user->getAuthIdentifier(),
+        ]);
+        $this->revokeAllSessions($user, 'password_changed');
+
+        return true;
+    }
+
+    private function permissionExistsInCatalog(string $resource, string $action, string $scope): bool
+    {
+        $catalog = config('alma-auth.rbac.roles', []);
+        if (! is_array($catalog)) {
+            return false;
+        }
+
+        foreach ($catalog as $definition) {
+            if (! is_array($definition)) {
+                continue;
+            }
+            foreach ($definition['permissions'] ?? [] as $perm) {
+                if (! is_array($perm)) {
+                    continue;
+                }
+                if (
+                    ($perm['resource'] ?? null) === $resource
+                    && ($perm['action'] ?? null) === $action
+                    && in_array($perm['scope'] ?? 'own', [$scope, 'any'], true)
+                ) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private function touchTrustedDevice(AuthenticatableUser $user, string $fingerprint): bool

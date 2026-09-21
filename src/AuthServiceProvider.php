@@ -6,6 +6,7 @@ namespace Alma\Auth;
 
 use Alma\Auth\Contracts\AuditLogger;
 use Alma\Auth\Contracts\PasskeyCeremony;
+use Alma\Auth\Contracts\RbacPolicy;
 use Alma\Auth\Contracts\RefreshTokenRepository;
 use Alma\Auth\Http\Middleware\RequiresRecentAuth;
 use Alma\Auth\Services\AuthService;
@@ -23,6 +24,7 @@ final class AuthServiceProvider extends ServiceProvider
         $this->app->singleton(PasskeyCeremony::class, WebAuthnPasskeyCeremony::class);
         $this->app->singleton(AuthService::class);
         $this->app->singleton(AuditLogger::class, fn ($app) => $app->make(AuthService::class));
+        $this->app->singleton(RbacPolicy::class, fn ($app) => $app->make(AuthService::class));
     }
 
     public function boot(Router $router): void

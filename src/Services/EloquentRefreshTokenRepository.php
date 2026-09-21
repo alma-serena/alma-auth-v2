@@ -90,4 +90,12 @@ final class EloquentRefreshTokenRepository implements RefreshTokenRepository
             ]);
         });
     }
+
+    public function revokeAllForUser(int|string $userId): int
+    {
+        return RefreshToken::query()
+            ->where('user_id', $userId)
+            ->where('revoked', false)
+            ->update(['revoked' => true]);
+    }
 }

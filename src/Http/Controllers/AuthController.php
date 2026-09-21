@@ -360,6 +360,43 @@ final class AuthController extends Controller
         ]);
     }
 
+    public function changePassword(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'current_password' => 'required|string',
+            'password' => 'required|string|min:8',
+        ]);
+
+        /** @var AuthenticatableUser $user */
+        $user = $request->user();
+
+        if (! $this->auth->changePassword($user, $data['current_password'], $data['password'])) {
+            return response()->json(['status' => 'invalid_credentials'], 401);
+        }
+
+        return response()->json(['status' => 'password_changed']);
+    }
+
+    public function revokeSessions(Request $request): JsonResponse
+    {
+        /** @var AuthenticatableUser $user */
+        $user = $request->user();
+        $this->auth->revokeAllSessions($user, 'manual');
+
+        return response()->json(['status' => 'sessions_revoked']);
+    }
+
+    public function listRoles(Request $request): JsonResponse
+    {
+        /** @var AuthenticatableUser $user */
+        $user = $request->user();
+
+        return response()->json([
+            'status' => 'ok',
+            'roles' => $this->auth->rolesFor($user),
+        ]);
+    }
+
     private function authenticatedResponse(
         AuthenticatableUser $user,
         string $deviceFingerprint,

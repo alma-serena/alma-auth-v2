@@ -19,4 +19,6 @@ interface AuthenticatableUser extends Authenticatable
     public function getEmailForAlmaAuth(): string;
 
     public function setEmailForAlmaAuth(string $email): void;
+
+    public function setAuthPassword(string $plainPassword): void;
 }

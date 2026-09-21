@@ -67,4 +67,9 @@ final class User extends Authenticatable implements AuthenticatableUser
     {
         $this->forceFill(['email' => $email])->save();
     }
+
+    public function setAuthPassword(string $plainPassword): void
+    {
+        $this->forceFill(['password' => $plainPassword])->save();
+    }
 }
