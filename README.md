@@ -7,7 +7,8 @@ Paquete Composer headless de autenticación para hosts Laravel.
 | Estándar ALMA (`v0.1.5`) | instalado |
 | AUTH-01 login + 2FA TOTP | MIS-002 / REQ-002 |
 | AUTH-02 refresh (familia + rotación) | MIS-003 / REQ-003 |
-| AUTH-03…10 | pendientes |
+| AUTH-03 lockout IP\|cuenta | MIS-004 / REQ-004 |
+| AUTH-04…10 | pendientes |
 | Consumidor de graduación | pendiente |
 
 ## Requisitos del host
