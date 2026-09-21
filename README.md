@@ -9,7 +9,8 @@ Paquete Composer headless de autenticación para hosts Laravel.
 | AUTH-02 refresh (familia + rotación) | MIS-003 / REQ-003 |
 | AUTH-03 lockout IP\|cuenta | MIS-004 / REQ-004 |
 | AUTH-07 audit HMAC | MIS-005 / REQ-005 |
-| AUTH-04…06, 08…10 | pendientes |
+| AUTH-06 step-up + email change | MIS-006 / REQ-006 |
+| AUTH-04, 05, 08…10 | pendientes |
 | Consumidor de graduación | pendiente |
 
 ## Requisitos del host
@@ -28,8 +29,11 @@ Paquete Composer headless de autenticación para hosts Laravel.
 | POST | `/login` | — (throttle 5/min) |
 | POST | `/refresh` | — (body: `refresh_token`) |
 | POST | `/2fa/verify` | Sanctum ability `2fa:verify` |
-| POST | `/2fa/enroll` | Sanctum ability `*` |
-| POST | `/2fa/confirm` | Sanctum ability `*` |
+| POST | `/step-up` | Sanctum ability `*` |
+| POST | `/2fa/enroll` | `*` + step-up reciente |
+| POST | `/2fa/confirm` | `*` + step-up reciente |
+| POST | `/email/change` | `*` + step-up reciente |
+| POST | `/email/confirm` | `*` + step-up reciente |
 
 Login y `2fa/verify` exitosos devuelven `token` + `refresh_token`.
 

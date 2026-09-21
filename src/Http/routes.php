@@ -17,7 +17,13 @@ Route::prefix('api/alma-auth')->group(function () {
     });
 
     Route::middleware(['auth:sanctum', CheckAbilities::class.':*'])->group(function () {
+        Route::post('/step-up', [AuthController::class, 'stepUp']);
+    });
+
+    Route::middleware(['auth:sanctum', CheckAbilities::class.':*', 'alma.recent'])->group(function () {
         Route::post('/2fa/enroll', [AuthController::class, 'enrollTwoFactor']);
         Route::post('/2fa/confirm', [AuthController::class, 'confirmTwoFactor']);
+        Route::post('/email/change', [AuthController::class, 'requestEmailChange']);
+        Route::post('/email/confirm', [AuthController::class, 'confirmEmailChange']);
     });
 });

@@ -19,4 +19,7 @@ return [
     | Nunca versionar el valor; solo el nombre de la variable de entorno.
     */
     'hmac_key' => env('ALMA_AUTH_HMAC_KEY'),
+
+    'step_up_minutes' => (int) env('ALMA_AUTH_STEP_UP_MINUTES', 10),
+    'email_change_ttl_minutes' => (int) env('ALMA_AUTH_EMAIL_CHANGE_TTL_MINUTES', 60),
 ];

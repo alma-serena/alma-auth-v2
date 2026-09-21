@@ -6,8 +6,10 @@ namespace Alma\Auth;
 
 use Alma\Auth\Contracts\AuditLogger;
 use Alma\Auth\Contracts\RefreshTokenRepository;
+use Alma\Auth\Http\Middleware\RequiresRecentAuth;
 use Alma\Auth\Services\AuthService;
 use Alma\Auth\Services\EloquentRefreshTokenRepository;
+use Illuminate\Routing\Router;
 use Illuminate\Support\ServiceProvider;
 
 final class AuthServiceProvider extends ServiceProvider
@@ -20,8 +22,10 @@ final class AuthServiceProvider extends ServiceProvider
         $this->app->singleton(AuditLogger::class, fn ($app) => $app->make(AuthService::class));
     }
 
-    public function boot(): void
+    public function boot(Router $router): void
     {
+        $router->aliasMiddleware('alma.recent', RequiresRecentAuth::class);
+
         $this->loadRoutesFrom(__DIR__.'/Http/routes.php');
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
         $this->loadTranslationsFrom(__DIR__.'/../resources/lang', 'alma-auth');

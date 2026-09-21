@@ -57,4 +57,14 @@ final class User extends Authenticatable implements AuthenticatableUser
     {
         $this->forceFill(['two_factor_enabled' => $enabled])->save();
     }
+
+    public function getEmailForAlmaAuth(): string
+    {
+        return (string) $this->email;
+    }
+
+    public function setEmailForAlmaAuth(string $email): void
+    {
+        $this->forceFill(['email' => $email])->save();
+    }
 }

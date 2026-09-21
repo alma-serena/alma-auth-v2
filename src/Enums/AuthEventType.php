@@ -14,4 +14,9 @@ enum AuthEventType: string
     case RefreshTokenIssued = 'refresh.issued';
     case RefreshTokenRotated = 'refresh.rotated';
     case RefreshReuseDetected = 'refresh.reuse_detected';
+    case StepUpSucceeded = 'step_up.succeeded';
+    case StepUpFailed = 'step_up.failed';
+    case EmailChangeRequested = 'email.change_requested';
+    case EmailChanged = 'email.changed';
+    case EmailChangeFailed = 'email.change_failed';
 }
