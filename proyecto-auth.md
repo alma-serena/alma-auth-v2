@@ -24,16 +24,11 @@ código aquí sin REQ.
 ## Stack
 
 - **Lenguaje:** PHP ≥ 8.3
-- **Framework de host:** Laravel (el paquete depende de `illuminate/support`)
-- **Auth base (planificado, no en génesis):** Laravel Sanctum ^4 + pragmarx/google2fa
-- **Sin frontend propio** — headless; la UI vive en el consumidor
-- **Dev (génesis):** PHPUnit 11, Laravel Pint
-- **Dev (próximas misiones):** Orchestra Testbench, PHPStan — entran con el REQ que los necesite
-
-Sanctum/Testbench no están en `composer.json` aún: Composer bloquea Laravel 11
-con advisories abiertos (`block-insecure`). La génesis no abre esa puerta; la
-primera primitiva AUTH lo resolverá con versiones no afectadas o excepción
-declarada.
+- **Framework de host:** Laravel 11.50+ / 12.69+ / 13.30+ (`illuminate/*`)
+- **Auth API:** Laravel Sanctum ^4.3.3
+- **2FA:** pragmarx/google2fa ^8
+- **Sin frontend propio** — headless
+- **Dev:** PHPUnit 11, Orchestra Testbench ^11, Laravel Pint
 
 ## Comandos ejecutables
 

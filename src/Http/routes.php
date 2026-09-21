@@ -1,0 +1,22 @@
+<?php
+
+declare(strict_types=1);
+
+use Alma\Auth\Http\Controllers\AuthController;
+use Illuminate\Support\Facades\Route;
+use Laravel\Sanctum\Http\Middleware\CheckAbilities;
+
+Route::prefix('api/alma-auth')->group(function () {
+    Route::middleware('throttle:5,1')->group(function () {
+        Route::post('/login', [AuthController::class, 'login']);
+    });
+
+    Route::middleware(['auth:sanctum', CheckAbilities::class.':2fa:verify'])->group(function () {
+        Route::post('/2fa/verify', [AuthController::class, 'verifyTwoFactor']);
+    });
+
+    Route::middleware(['auth:sanctum', CheckAbilities::class.':*'])->group(function () {
+        Route::post('/2fa/enroll', [AuthController::class, 'enrollTwoFactor']);
+        Route::post('/2fa/confirm', [AuthController::class, 'confirmTwoFactor']);
+    });
+});
