@@ -25,6 +25,7 @@ abstract class TestCase extends Orchestra
             'alma-auth.user_model' => User::class,
             'alma-auth.lockout_max_attempts' => 5,
             'alma-auth.lockout_decay_minutes' => 15,
+            'alma-auth.hmac_key' => str_repeat('a', 32),
             'app.key' => 'base64:'.base64_encode(random_bytes(32)),
             'app.locale' => 'es',
             'app.fallback_locale' => 'en',
