@@ -19,4 +19,8 @@ enum AuthEventType: string
     case EmailChangeRequested = 'email.change_requested';
     case EmailChanged = 'email.changed';
     case EmailChangeFailed = 'email.change_failed';
+    case PasskeyRegistered = 'passkey.registered';
+    case PasskeyAuthenticated = 'passkey.authenticated';
+    case PasskeyAuthFailed = 'passkey.auth_failed';
+    case PasskeyRevoked = 'passkey.revoked';
 }
