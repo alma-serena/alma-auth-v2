@@ -23,4 +23,7 @@ enum AuthEventType: string
     case PasskeyAuthenticated = 'passkey.authenticated';
     case PasskeyAuthFailed = 'passkey.auth_failed';
     case PasskeyRevoked = 'passkey.revoked';
+    case TrustedDeviceMarked = 'trusted_device.marked';
+    case TrustedDeviceUsed = 'trusted_device.used';
+    case TrustedDeviceRevoked = 'trusted_device.revoked';
 }
