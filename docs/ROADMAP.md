@@ -17,16 +17,18 @@ Condiciones pre-firmadas para abrir misiones futuras. Lo que no está aquí
 | AUTH-08 | Consentimiento legal (hooks) | MIS-009 |
 | AUTH-09 | Este roadmap | MIS-010 |
 | AUTH-10 | RBAC + matriz de revocación | MIS-011 |
+| OAuth social | Vínculo + login (verificador inyectable) | MIS-012 |
 
 ## Siguiente acordado
 
-Ninguno pendiente del catálogo AUTH-01…10. Lo nuevo entra por REQ propio.
+Ninguno pendiente del catálogo AUTH-01…10 ni OAuth social base. Lo nuevo entra por REQ propio.
 
 ## Diferido (requiere REQ nuevo)
 
-- **OAuth social** (Google/Apple/etc.): no hay proveedor en v2; AUTH-01 quedó en email/password + TOTP.
+- **Adaptador Socialite / SDK Google-Apple** en el host (el paquete solo exige `OAuthIdentityVerifier`).
 - **Notificaciones** (email/push al marcar dispositivo o login nuevo): el host observa audit.
 - **Paquete `alma/auth-legal-cl`**: textos Ley 21.719 viven en el host; AUTH-08 solo persiste consentimiento.
+- **Autoregistro vía OAuth** / autovínculo por email: explícitamente fuera (vínculo solo con step-up).
 - **WebAuthn MDS / attestation enterprise**: solo `none` attestation.
 - **PHPStan en `lint:`**: se añade cuando la superficie analizable lo justifique.
 - **Consumidor de graduación**: app host que certifique el paquete en producción.

@@ -72,4 +72,13 @@ return [
             ],
         ],
     ],
+
+    /*
+    | Proveedores OAuth permitidos (REQ-012). El host verifica tokens vía
+    | Alma\Auth\Contracts\OAuthIdentityVerifier (no se incluye Socialite).
+    */
+    'oauth_providers' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', (string) env('ALMA_AUTH_OAUTH_PROVIDERS', 'google,apple,github')),
+    ))),
 ];

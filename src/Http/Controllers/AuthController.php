@@ -397,6 +397,105 @@ final class AuthController extends Controller
         ]);
     }
 
+    public function oauthLogin(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'provider' => 'required|string|max:32',
+            'access_token' => 'sometimes|string',
+            'id_token' => 'sometimes|string',
+            'device_fingerprint' => 'sometimes|string|max:255',
+        ]);
+
+        if (! isset($data['access_token']) && ! isset($data['id_token'])) {
+            return response()->json(['status' => 'oauth_invalid'], 422);
+        }
+
+        $result = $this->auth->attemptOAuthLogin(
+            $data['provider'],
+            [
+                'access_token' => $data['access_token'] ?? null,
+                'id_token' => $data['id_token'] ?? null,
+            ],
+            $request->ip() ?? '0.0.0.0',
+            $data['device_fingerprint'] ?? '',
+        );
+
+        if (! $result->success || $result->user === null) {
+            return response()->json(['status' => 'oauth_invalid'], 401);
+        }
+
+        if ($result->requiresTwoFactor) {
+            $token = $result->user->createToken('2fa-pending', ['2fa:verify'])->plainTextToken;
+
+            return response()->json([
+                'status' => '2fa_required',
+                'token' => $token,
+            ]);
+        }
+
+        return $this->authenticatedResponse(
+            $result->user,
+            $data['device_fingerprint'] ?? '',
+            $request->ip(),
+        );
+    }
+
+    public function oauthLink(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'provider' => 'required|string|max:32',
+            'access_token' => 'sometimes|string',
+            'id_token' => 'sometimes|string',
+        ]);
+
+        if (! isset($data['access_token']) && ! isset($data['id_token'])) {
+            return response()->json(['status' => 'oauth_invalid'], 422);
+        }
+
+        /** @var AuthenticatableUser $user */
+        $user = $request->user();
+        $identity = $this->auth->linkOAuth(
+            $user,
+            $data['provider'],
+            [
+                'access_token' => $data['access_token'] ?? null,
+                'id_token' => $data['id_token'] ?? null,
+            ],
+        );
+
+        if ($identity === null) {
+            return response()->json(['status' => 'oauth_link_failed'], 422);
+        }
+
+        return response()->json([
+            'status' => 'oauth_linked',
+            'provider' => $identity->provider,
+        ]);
+    }
+
+    public function oauthUnlink(Request $request, string $provider): JsonResponse
+    {
+        /** @var AuthenticatableUser $user */
+        $user = $request->user();
+
+        if (! $this->auth->unlinkOAuth($user, $provider)) {
+            return response()->json(['status' => 'oauth_not_linked'], 404);
+        }
+
+        return response()->json(['status' => 'oauth_unlinked']);
+    }
+
+    public function listOAuthLinks(Request $request): JsonResponse
+    {
+        /** @var AuthenticatableUser $user */
+        $user = $request->user();
+
+        return response()->json([
+            'status' => 'ok',
+            'links' => $this->auth->listOAuthLinks($user),
+        ]);
+    }
+
     private function authenticatedResponse(
         AuthenticatableUser $user,
         string $deviceFingerprint,

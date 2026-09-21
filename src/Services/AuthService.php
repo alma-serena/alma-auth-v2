@@ -6,6 +6,7 @@ namespace Alma\Auth\Services;
 
 use Alma\Auth\Contracts\AuditLogger;
 use Alma\Auth\Contracts\AuthenticatableUser;
+use Alma\Auth\Contracts\OAuthIdentityVerifier;
 use Alma\Auth\Contracts\PasskeyCeremony;
 use Alma\Auth\Contracts\RbacPolicy;
 use Alma\Auth\Contracts\RefreshTokenRepository;
@@ -13,6 +14,7 @@ use Alma\Auth\Enums\AuthEventType;
 use Alma\Auth\Models\AuditLog;
 use Alma\Auth\Models\ConsentRecord;
 use Alma\Auth\Models\EmailChangeRequest;
+use Alma\Auth\Models\OAuthIdentity;
 use Alma\Auth\Models\Passkey;
 use Alma\Auth\Models\Role;
 use Alma\Auth\Models\RolePermission;
@@ -34,6 +36,7 @@ final class AuthService implements AuditLogger, RbacPolicy
     public function __construct(
         private RefreshTokenRepository $refreshTokens,
         private PasskeyCeremony $passkeyCeremony,
+        private OAuthIdentityVerifier $oauthVerifier,
     ) {}
 
     public function attemptLogin(
@@ -81,6 +84,176 @@ final class AuthService implements AuditLogger, RbacPolicy
 
         $this->clearLockout($email, $ip);
 
+        return $this->finishLogin($user, $ip, $deviceFingerprint);
+    }
+
+    /**
+     * @param  array{access_token?: string, id_token?: string}  $credential
+     */
+    public function attemptOAuthLogin(
+        string $provider,
+        array $credential,
+        string $ip = '0.0.0.0',
+        string $deviceFingerprint = '',
+    ): LoginResult {
+        $provider = strtolower(trim($provider));
+        if (! $this->isAllowedOAuthProvider($provider)) {
+            $this->log(AuthEventType::OAuthLoginFailed->value, [
+                'provider' => $provider,
+                'ip' => $ip,
+                'reason' => 'provider_not_allowed',
+            ]);
+
+            return LoginResult::invalid();
+        }
+
+        try {
+            $info = $this->oauthVerifier->verify($provider, $credential);
+        } catch (\Throwable) {
+            $this->log(AuthEventType::OAuthLoginFailed->value, [
+                'provider' => $provider,
+                'ip' => $ip,
+                'reason' => 'verification_failed',
+            ]);
+
+            return LoginResult::invalid();
+        }
+
+        /** @var OAuthIdentity|null $identity */
+        $identity = OAuthIdentity::query()
+            ->where('provider', $info->provider)
+            ->where('provider_user_id', $info->providerUserId)
+            ->first();
+
+        if ($identity === null) {
+            $this->log(AuthEventType::OAuthLoginFailed->value, [
+                'provider' => $provider,
+                'ip' => $ip,
+                'reason' => 'not_linked',
+            ]);
+
+            return LoginResult::invalid();
+        }
+
+        $user = $this->resolveUserById($identity->user_id);
+        if ($user === null) {
+            $this->log(AuthEventType::OAuthLoginFailed->value, [
+                'provider' => $provider,
+                'ip' => $ip,
+                'reason' => 'user_missing',
+            ]);
+
+            return LoginResult::invalid();
+        }
+
+        return $this->finishLogin($user, $ip, $deviceFingerprint, 'oauth');
+    }
+
+    /**
+     * @param  array{access_token?: string, id_token?: string}  $credential
+     */
+    public function linkOAuth(
+        AuthenticatableUser $user,
+        string $provider,
+        array $credential,
+    ): ?OAuthIdentity {
+        $provider = strtolower(trim($provider));
+        if (! $this->isAllowedOAuthProvider($provider)) {
+            return null;
+        }
+
+        try {
+            $info = $this->oauthVerifier->verify($provider, $credential);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        $taken = OAuthIdentity::query()
+            ->where('provider', $info->provider)
+            ->where('provider_user_id', $info->providerUserId)
+            ->where('user_id', '!=', $user->getAuthIdentifier())
+            ->exists();
+
+        if ($taken) {
+            return null;
+        }
+
+        /** @var OAuthIdentity $identity */
+        $identity = OAuthIdentity::query()->updateOrCreate(
+            [
+                'user_id' => $user->getAuthIdentifier(),
+                'provider' => $info->provider,
+            ],
+            [
+                'provider_user_id' => $info->providerUserId,
+                'linked_at' => now(),
+            ],
+        );
+
+        $this->log(AuthEventType::OAuthLinked->value, [
+            'user_id' => $user->getAuthIdentifier(),
+            'provider' => $info->provider,
+            'identity_id' => $identity->id,
+        ]);
+
+        return $identity;
+    }
+
+    public function unlinkOAuth(AuthenticatableUser $user, string $provider): bool
+    {
+        $provider = strtolower(trim($provider));
+
+        /** @var OAuthIdentity|null $identity */
+        $identity = OAuthIdentity::query()
+            ->where('user_id', $user->getAuthIdentifier())
+            ->where('provider', $provider)
+            ->first();
+
+        if ($identity === null) {
+            return false;
+        }
+
+        $identity->delete();
+        $this->log(AuthEventType::OAuthUnlinked->value, [
+            'user_id' => $user->getAuthIdentifier(),
+            'provider' => $provider,
+        ]);
+
+        return true;
+    }
+
+    /**
+     * @return list<array{provider: string, linked_at: ?string}>
+     */
+    public function listOAuthLinks(AuthenticatableUser $user): array
+    {
+        return OAuthIdentity::query()
+            ->where('user_id', $user->getAuthIdentifier())
+            ->orderBy('provider')
+            ->get(['provider', 'linked_at'])
+            ->map(static fn (OAuthIdentity $i): array => [
+                'provider' => $i->provider,
+                'linked_at' => $i->linked_at?->toIso8601String(),
+            ])
+            ->all();
+    }
+
+    public function isAllowedOAuthProvider(string $provider): bool
+    {
+        $allowed = config('alma-auth.oauth_providers', []);
+        if (! is_array($allowed) || $allowed === []) {
+            return false;
+        }
+
+        return in_array(strtolower(trim($provider)), array_map('strtolower', $allowed), true);
+    }
+
+    private function finishLogin(
+        AuthenticatableUser $user,
+        string $ip,
+        string $deviceFingerprint,
+        string $via = 'password',
+    ): LoginResult {
         if ($user->hasTwoFactorEnabled()) {
             if ($this->touchTrustedDevice($user, $deviceFingerprint)) {
                 $this->log(AuthEventType::LoginSucceeded->value, [
@@ -88,6 +261,7 @@ final class AuthService implements AuditLogger, RbacPolicy
                     'ip' => $ip,
                     'requires_2fa' => false,
                     'trusted_device' => true,
+                    'via' => $via,
                 ]);
                 $this->log(AuthEventType::TrustedDeviceUsed->value, [
                     'user_id' => $user->getAuthIdentifier(),
@@ -100,6 +274,7 @@ final class AuthService implements AuditLogger, RbacPolicy
                 'user_id' => $user->getAuthIdentifier(),
                 'ip' => $ip,
                 'requires_2fa' => true,
+                'via' => $via,
             ]);
 
             return LoginResult::requiresTwoFactor($user);
@@ -109,6 +284,7 @@ final class AuthService implements AuditLogger, RbacPolicy
             'user_id' => $user->getAuthIdentifier(),
             'ip' => $ip,
             'requires_2fa' => false,
+            'via' => $via,
         ]);
 
         return LoginResult::authenticated($user);
