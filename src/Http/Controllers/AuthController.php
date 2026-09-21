@@ -23,7 +23,11 @@ final class AuthController extends Controller
             'device_fingerprint' => 'sometimes|string|max:255',
         ]);
 
-        $result = $this->auth->attemptLogin($credentials['email'], $credentials['password']);
+        $result = $this->auth->attemptLogin(
+            $credentials['email'],
+            $credentials['password'],
+            $request->ip() ?? '0.0.0.0',
+        );
 
         if (! $result->success || $result->user === null) {
             throw ValidationException::withMessages([

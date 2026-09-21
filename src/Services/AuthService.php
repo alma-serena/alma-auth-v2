@@ -21,25 +21,66 @@ final class AuthService
         private RefreshTokenRepository $refreshTokens,
     ) {}
 
-    public function attemptLogin(string $email, string $password): LoginResult
+    public function attemptLogin(string $email, string $password, string $ip = '0.0.0.0'): LoginResult
     {
-        $user = $this->resolveUser($email);
-
-        if ($user === null) {
+        if ($this->isLockedOut($email, $ip)) {
             $this->consumeDummyHash($password);
 
             return LoginResult::invalid();
         }
 
-        if (! Hash::check($password, $user->getAuthPassword())) {
+        $user = $this->resolveUser($email);
+
+        if ($user === null) {
+            $this->consumeDummyHash($password);
+            $this->registerFailedLogin($email, $ip);
+
             return LoginResult::invalid();
         }
+
+        if (! Hash::check($password, $user->getAuthPassword())) {
+            $this->registerFailedLogin($email, $ip);
+
+            return LoginResult::invalid();
+        }
+
+        $this->clearLockout($email, $ip);
 
         if ($user->hasTwoFactorEnabled()) {
             return LoginResult::requiresTwoFactor($user);
         }
 
         return LoginResult::authenticated($user);
+    }
+
+    public function isLockedOut(string $email, string $ip): bool
+    {
+        $max = (int) config('alma-auth.lockout_max_attempts', 5);
+
+        return $this->failedAttempts($email, $ip) >= $max;
+    }
+
+    public function registerFailedLogin(string $email, string $ip): void
+    {
+        $key = $this->lockoutCacheKey($email, $ip);
+        $decay = (int) config('alma-auth.lockout_decay_minutes', 15);
+        $attempts = (int) cache()->get($key, 0) + 1;
+        cache()->put($key, $attempts, now()->addMinutes($decay));
+    }
+
+    public function clearLockout(string $email, string $ip): void
+    {
+        cache()->forget($this->lockoutCacheKey($email, $ip));
+    }
+
+    public function failedAttempts(string $email, string $ip): int
+    {
+        return (int) cache()->get($this->lockoutCacheKey($email, $ip), 0);
+    }
+
+    private function lockoutCacheKey(string $email, string $ip): string
+    {
+        return 'alma_auth_lockout:'.hash('sha256', strtolower($email).'|'.$ip);
     }
 
     /**
