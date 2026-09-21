@@ -13,7 +13,10 @@ Paquete Composer headless de autenticación para hosts Laravel.
 | AUTH-04 passkeys (WebAuthn) | MIS-007 / REQ-007 |
 | AUTH-05 trusted devices | MIS-008 / REQ-008 |
 | AUTH-08 consentimiento legal | MIS-009 / REQ-009 |
-| AUTH-09…10 | pendientes |
+| AUTH-09 roadmap | MIS-010 / REQ-010 |
+| AUTH-10 RBAC + revocación | pendiente |
+
+Roadmap detallado: [docs/ROADMAP.md](docs/ROADMAP.md).
 | Consumidor de graduación | pendiente |
 
 ## Requisitos del host
