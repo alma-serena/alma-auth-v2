@@ -1,36 +1,34 @@
 # alma/auth (v2) — renacimiento bajo ALMA
 
-Paquete Composer headless de autenticación para hosts Laravel del ecosistema Alma.
+Paquete Composer headless de autenticación para hosts Laravel.
 
 | Pieza | Estado |
 |---|---|
 | Estándar ALMA (`v0.1.5`) | instalado |
-| Hook OPS-07 n1 | activo |
-| Raíz de confianza | configurada en GitHub |
-| Scaffold Composer | MIS-001 / REQ-001 |
-| Primitivas AUTH | pendientes (REQ propios) |
+| AUTH-01 login + 2FA TOTP | MIS-002 / REQ-002 |
+| AUTH-02…10 | pendientes |
 | Consumidor de graduación | pendiente |
 
-## Uso (cuando exista superficie)
+## Requisitos del host
 
-```bash
-composer require alma/auth
-```
+1. Modelo de usuario que implemente `Alma\Auth\Contracts\AuthenticatableUser` y use `Laravel\Sanctum\HasApiTokens`.
+2. Configurar `ALMA_AUTH_USER_MODEL` (o `config/alma-auth.php`).
+3. Columnas `two_factor_secret` (text nullable) y `two_factor_enabled` (bool) en usuarios.
+4. Publicar config: `php artisan vendor:publish --tag=alma-auth-config`
 
-Hoy el paquete solo expone `Alma\Auth\AuthServiceProvider` vacío: las primitivas
-entran por misión, no por copia del árbol histórico.
+## Rutas (`api/alma-auth`)
 
-## Lectura para agentes
-
-1. `AGENTS.md`
-2. `proyecto-auth.md`
-3. `.agents/rules/` y workflows según la misión
-4. `METODOLOGIA.md`
+| Método | Ruta | Auth |
+|---|---|---|
+| POST | `/login` | — (throttle 5/min) |
+| POST | `/2fa/verify` | Sanctum ability `2fa:verify` |
+| POST | `/2fa/enroll` | Sanctum ability `*` |
+| POST | `/2fa/confirm` | Sanctum ability `*` |
 
 ## Comandos
 
 ```
-composer install
+composer install --no-interaction
 composer test
 composer style
 ```
