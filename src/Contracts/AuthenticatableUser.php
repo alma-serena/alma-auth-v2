@@ -15,4 +15,8 @@ interface AuthenticatableUser extends Authenticatable
     public function setTwoFactorSecret(?string $encryptedSecret): void;
 
     public function setTwoFactorEnabled(bool $enabled): void;
+
+    public function getEmailForAlmaAuth(): string;
+
+    public function setEmailForAlmaAuth(string $email): void;
 }

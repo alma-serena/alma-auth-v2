@@ -9,6 +9,7 @@ use Alma\Auth\Contracts\AuthenticatableUser;
 use Alma\Auth\Contracts\RefreshTokenRepository;
 use Alma\Auth\Enums\AuthEventType;
 use Alma\Auth\Models\AuditLog;
+use Alma\Auth\Models\EmailChangeRequest;
 use Alma\Auth\ValueObjects\LoginResult;
 use Alma\Auth\ValueObjects\RefreshRotationResult;
 use Illuminate\Support\Facades\Crypt;
@@ -229,6 +230,90 @@ final class AuthService implements AuditLogger
 
             return RefreshRotationResult::failed($e->getMessage());
         }
+    }
+
+    public function markStepUpForToken(int|string $tokenId): void
+    {
+        $minutes = (int) config('alma-auth.step_up_minutes', 10);
+        cache()->put(
+            'alma_auth_step_up:'.$tokenId,
+            now()->timestamp,
+            now()->addMinutes(max($minutes, 1)),
+        );
+    }
+
+    public function confirmStepUp(AuthenticatableUser $user, string $password, int|string $tokenId): bool
+    {
+        if (! Hash::check($password, $user->getAuthPassword())) {
+            $this->log(AuthEventType::StepUpFailed->value, [
+                'user_id' => $user->getAuthIdentifier(),
+            ]);
+
+            return false;
+        }
+
+        $this->markStepUpForToken($tokenId);
+        $this->log(AuthEventType::StepUpSucceeded->value, [
+            'user_id' => $user->getAuthIdentifier(),
+        ]);
+
+        return true;
+    }
+
+    /**
+     * @return string Plain confirmation code for the host to deliver (email, etc.)
+     */
+    public function requestEmailChange(AuthenticatableUser $user, string $newEmail): string
+    {
+        EmailChangeRequest::query()
+            ->where('user_id', $user->getAuthIdentifier())
+            ->whereNull('consumed_at')
+            ->update(['consumed_at' => now()]);
+
+        $plain = Str::random(32);
+        $ttl = (int) config('alma-auth.email_change_ttl_minutes', 60);
+
+        EmailChangeRequest::query()->create([
+            'user_id' => $user->getAuthIdentifier(),
+            'new_email' => strtolower($newEmail),
+            'code_hash' => hash('sha256', $plain),
+            'expires_at' => now()->addMinutes($ttl),
+        ]);
+
+        $this->log(AuthEventType::EmailChangeRequested->value, [
+            'user_id' => $user->getAuthIdentifier(),
+            'new_email' => strtolower($newEmail),
+        ]);
+
+        return $plain;
+    }
+
+    public function confirmEmailChange(AuthenticatableUser $user, string $code): bool
+    {
+        /** @var EmailChangeRequest|null $pending */
+        $pending = EmailChangeRequest::query()
+            ->where('user_id', $user->getAuthIdentifier())
+            ->whereNull('consumed_at')
+            ->orderByDesc('id')
+            ->first();
+
+        if ($pending === null || ! $pending->isOpen() || ! hash_equals($pending->code_hash, hash('sha256', $code))) {
+            $this->log(AuthEventType::EmailChangeFailed->value, [
+                'user_id' => $user->getAuthIdentifier(),
+            ]);
+
+            return false;
+        }
+
+        $user->setEmailForAlmaAuth($pending->new_email);
+        $pending->forceFill(['consumed_at' => now()])->save();
+
+        $this->log(AuthEventType::EmailChanged->value, [
+            'user_id' => $user->getAuthIdentifier(),
+            'new_email' => $pending->new_email,
+        ]);
+
+        return true;
     }
 
     public function log(string $event, array $context = []): void

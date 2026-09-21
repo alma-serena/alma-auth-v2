@@ -97,13 +97,33 @@ final class AuthController extends Controller
             return response()->json(['status' => 'invalid_refresh_token'], 401);
         }
 
-        $access = $user->createToken('auth', ['*'])->plainTextToken;
+        $access = $user->createToken('auth', ['*']);
 
         return response()->json([
             'status' => 'authenticated',
-            'token' => $access,
+            'token' => $access->plainTextToken,
             'refresh_token' => $rotation->refreshToken,
         ]);
+    }
+
+    public function stepUp(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'password' => 'required|string',
+        ]);
+
+        /** @var AuthenticatableUser $user */
+        $user = $request->user();
+        $token = $user->currentAccessToken();
+        if ($token === null) {
+            return response()->json(['status' => 'unauthenticated'], 401);
+        }
+
+        if (! $this->auth->confirmStepUp($user, $data['password'], $token->getKey())) {
+            return response()->json(['status' => 'invalid_credentials'], 401);
+        }
+
+        return response()->json(['status' => 'step_up_ok']);
     }
 
     public function enrollTwoFactor(Request $request): JsonResponse
@@ -132,17 +152,47 @@ final class AuthController extends Controller
         return response()->json(['status' => 'two_factor_enabled']);
     }
 
+    public function requestEmailChange(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'email' => 'required|email',
+        ]);
+
+        /** @var AuthenticatableUser $user */
+        $user = $request->user();
+        $this->auth->requestEmailChange($user, $data['email']);
+
+        return response()->json(['status' => 'email_change_requested']);
+    }
+
+    public function confirmEmailChange(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'code' => 'required|string',
+        ]);
+
+        /** @var AuthenticatableUser $user */
+        $user = $request->user();
+
+        if (! $this->auth->confirmEmailChange($user, $data['code'])) {
+            return response()->json(['status' => 'invalid_code'], 422);
+        }
+
+        return response()->json(['status' => 'email_changed']);
+    }
+
     private function authenticatedResponse(
         AuthenticatableUser $user,
         string $deviceFingerprint,
         ?string $ip,
     ): JsonResponse {
-        $access = $user->createToken('auth', ['*'])->plainTextToken;
+        $access = $user->createToken('auth', ['*']);
+        $this->auth->markStepUpForToken($access->accessToken->getKey());
         $refresh = $this->auth->issueRefreshToken($user, $deviceFingerprint, $ip);
 
         return response()->json([
             'status' => 'authenticated',
-            'token' => $access,
+            'token' => $access->plainTextToken,
             'refresh_token' => $refresh,
         ]);
     }
