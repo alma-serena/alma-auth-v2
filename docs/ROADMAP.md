@@ -16,12 +16,11 @@ Condiciones pre-firmadas para abrir misiones futuras. Lo que no está aquí
 | AUTH-07 | Audit HMAC | MIS-005 |
 | AUTH-08 | Consentimiento legal (hooks) | MIS-009 |
 | AUTH-09 | Este roadmap | MIS-010 |
+| AUTH-10 | RBAC + matriz de revocación | MIS-011 |
 
 ## Siguiente acordado
 
-| Código | Capacidad | Notas |
-|---|---|---|
-| AUTH-10 | RBAC canónico + matriz de revocación | Separar definición de rol vs asignación; `revokeAll` con call sites reales |
+Ninguno pendiente del catálogo AUTH-01…10. Lo nuevo entra por REQ propio.
 
 ## Diferido (requiere REQ nuevo)
 

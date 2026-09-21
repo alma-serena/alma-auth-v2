@@ -24,6 +24,7 @@ Route::prefix('api/alma-auth')->group(function () {
         Route::get('/devices', [AuthController::class, 'listTrustedDevices']);
         Route::get('/legal/consents', [AuthController::class, 'listConsents']);
         Route::post('/legal/consent', [AuthController::class, 'recordConsent']);
+        Route::get('/roles', [AuthController::class, 'listRoles']);
     });
 
     Route::middleware(['auth:sanctum', CheckAbilities::class.':*', 'alma.recent'])->group(function () {
@@ -35,5 +36,7 @@ Route::prefix('api/alma-auth')->group(function () {
         Route::post('/passkeys/register', [AuthController::class, 'passkeyRegister']);
         Route::delete('/passkeys/{passkey}', [AuthController::class, 'revokePasskey']);
         Route::delete('/devices/{device}', [AuthController::class, 'revokeTrustedDevice']);
+        Route::post('/password/change', [AuthController::class, 'changePassword']);
+        Route::post('/sessions/revoke', [AuthController::class, 'revokeSessions']);
     });
 });

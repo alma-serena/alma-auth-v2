@@ -24,4 +24,6 @@ interface RefreshTokenRepository
      * @throws \RuntimeException When rotation is rejected
      */
     public function rotate(string $oldPlainToken, string $deviceFingerprint): string;
+
+    public function revokeAllForUser(int|string $userId): int;
 }

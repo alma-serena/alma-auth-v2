@@ -48,4 +48,28 @@ return [
             'privacy_policy,terms_of_service,marketing',
         )),
     ))),
+
+    /*
+    | Catálogo RBAC (AUTH-10). Los permisos solo existen si están aquí.
+    | Semilla vía AuthService::syncRbacCatalog().
+    */
+    'rbac' => [
+        'roles' => [
+            'user' => [
+                'description' => 'Usuario autenticado',
+                'permissions' => [
+                    ['resource' => 'profile', 'action' => 'read', 'scope' => 'own'],
+                    ['resource' => 'profile', 'action' => 'update', 'scope' => 'own'],
+                ],
+            ],
+            'admin' => [
+                'description' => 'Administrador',
+                'permissions' => [
+                    ['resource' => 'profile', 'action' => 'read', 'scope' => 'any'],
+                    ['resource' => 'profile', 'action' => 'update', 'scope' => 'any'],
+                    ['resource' => 'users', 'action' => 'read', 'scope' => 'any'],
+                ],
+            ],
+        ],
+    ],
 ];

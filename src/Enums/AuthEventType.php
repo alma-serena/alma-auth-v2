@@ -27,4 +27,7 @@ enum AuthEventType: string
     case TrustedDeviceUsed = 'trusted_device.used';
     case TrustedDeviceRevoked = 'trusted_device.revoked';
     case LegalConsentRecorded = 'legal.consent_recorded';
+    case SessionRevoked = 'session.revoked';
+    case PasswordChanged = 'password.changed';
+    case RolesChanged = 'roles.changed';
 }
