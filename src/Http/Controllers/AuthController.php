@@ -319,6 +319,47 @@ final class AuthController extends Controller
         return response()->json(['status' => 'device_revoked']);
     }
 
+    public function recordConsent(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'purpose' => 'required|string|max:64',
+            'policy_version' => 'required|string|max:64',
+        ]);
+
+        /** @var AuthenticatableUser $user */
+        $user = $request->user();
+        $record = $this->auth->recordConsent(
+            $user,
+            $data['purpose'],
+            $data['policy_version'],
+            $request->ip(),
+        );
+
+        if ($record === null) {
+            return response()->json(['status' => 'invalid_purpose'], 422);
+        }
+
+        return response()->json([
+            'status' => 'consent_recorded',
+            'consent' => [
+                'id' => $record->id,
+                'purpose' => $record->purpose,
+                'policy_version' => $record->policy_version,
+            ],
+        ]);
+    }
+
+    public function listConsents(Request $request): JsonResponse
+    {
+        /** @var AuthenticatableUser $user */
+        $user = $request->user();
+
+        return response()->json([
+            'status' => 'ok',
+            'consents' => $this->auth->listConsents($user),
+        ]);
+    }
+
     private function authenticatedResponse(
         AuthenticatableUser $user,
         string $deviceFingerprint,
