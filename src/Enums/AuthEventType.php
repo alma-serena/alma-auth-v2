@@ -33,4 +33,7 @@ enum AuthEventType: string
     case OAuthLinked = 'oauth.linked';
     case OAuthUnlinked = 'oauth.unlinked';
     case OAuthLoginFailed = 'oauth.login_failed';
+    case AccountOpened = 'account.opened';
+    case AccountOpenIgnored = 'account.open_ignored';
+    case AccountOpenRejected = 'account.open_rejected';
 }

@@ -52,6 +52,32 @@ final class AuthController extends Controller
         );
     }
 
+    public function register(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'email' => 'required|email',
+            'password' => 'required|string|min:12',
+            'name' => 'sometimes|nullable|string|max:255',
+        ], [
+            'password.min' => __('alma-auth::messages.password_rejected'),
+        ]);
+
+        $accepted = $this->auth->openAccount(
+            $data['email'],
+            $data['password'],
+            (string) ($data['name'] ?? ''),
+            $request->ip() ?? '0.0.0.0',
+        );
+
+        if (! $accepted) {
+            throw ValidationException::withMessages([
+                'password' => [__('alma-auth::messages.password_rejected')],
+            ]);
+        }
+
+        return response()->json(['status' => 'accepted'], 202);
+    }
+
     public function verifyTwoFactor(Request $request): JsonResponse
     {
         $data = $request->validate([
