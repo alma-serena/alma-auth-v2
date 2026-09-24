@@ -9,6 +9,7 @@ use Laravel\Sanctum\Http\Middleware\CheckAbilities;
 Route::prefix('api/alma-auth')->group(function () {
     Route::middleware('throttle:5,1')->group(function () {
         Route::post('/login', [AuthController::class, 'login']);
+        Route::post('/register', [AuthController::class, 'register']);
         Route::post('/refresh', [AuthController::class, 'refresh']);
         Route::post('/passkeys/login/options', [AuthController::class, 'passkeyLoginOptions']);
         Route::post('/passkeys/login', [AuthController::class, 'passkeyLogin']);

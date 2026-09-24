@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Alma\Auth\Tests;
 
 use Alma\Auth\AuthServiceProvider;
+use Alma\Auth\Contracts\CompromisedPasswordChecker;
 use Alma\Auth\Contracts\OAuthIdentityVerifier;
 use Alma\Auth\Contracts\PasskeyCeremony;
 use Alma\Auth\Services\FakeOAuthIdentityVerifier;
@@ -27,6 +28,13 @@ abstract class TestCase extends Orchestra
 
         $this->app->instance(PasskeyCeremony::class, new FakePasskeyCeremony);
         $this->app->instance(OAuthIdentityVerifier::class, new FakeOAuthIdentityVerifier);
+        $this->app->instance(CompromisedPasswordChecker::class, new class implements CompromisedPasswordChecker
+        {
+            public function isCompromised(string $password): bool
+            {
+                return $password === 'compromised-password';
+            }
+        });
 
         config([
             'alma-auth.user_model' => User::class,

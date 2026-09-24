@@ -19,10 +19,11 @@ Condiciones pre-firmadas para abrir misiones futuras. Lo que no está aquí
 | AUTH-10 | RBAC + matriz de revocación | MIS-011 |
 | OAuth social | Vínculo + login (verificador inyectable) | MIS-012 |
 | OAuth Google | Adaptador userinfo/tokeninfo | MIS-013 |
+| Alta por correo | `POST /register`, sin delatar si el correo ya existe | MIS-014 |
 
 ## Siguiente acordado
 
-Ninguno pendiente. Lo nuevo entra por REQ propio.
+Ninguno pendiente. Lo nuevo entra por REQ propio. El candidato a consumidor es WorldWeaver; no está abierto.
 
 ## Diferido (requiere REQ nuevo)
 

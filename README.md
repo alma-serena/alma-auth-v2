@@ -37,11 +37,14 @@ Roadmap detallado: [docs/ROADMAP.md](docs/ROADMAP.md).
     Otros proveedores: implementá `OAuthIdentityVerifier` o esperá adaptadores futuros.
     Sin client_id, el default rechaza tokens.
 
+13. Alta por correo: el modelo del host acepta `name`, `email` y `password` (cast `hashed`). El host deriva con Argon2id (`HASH_DRIVER=argon2id`). La consulta de filtraciones es Have I Been Pwned por prefijo; si no responde, el alta sigue.
+
 ## Rutas (`api/alma-auth`)
 
 | Método | Ruta | Auth |
 |---|---|---|
 | POST | `/login` | — (throttle 5/min) |
+| POST | `/register` | — (throttle 5/min). Alta por correo. Siempre `202 {"status":"accepted"}` si el correo es válido y la contraseña no está filtrada, exista o no la cuenta. No cambia una contraseña ya puesta. |
 | POST | `/refresh` | — (body: `refresh_token`) |
 | POST | `/passkeys/login/options` | — (throttle 5/min) |
 | POST | `/passkeys/login` | — (throttle 5/min) |

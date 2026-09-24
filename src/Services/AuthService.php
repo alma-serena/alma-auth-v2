@@ -6,6 +6,7 @@ namespace Alma\Auth\Services;
 
 use Alma\Auth\Contracts\AuditLogger;
 use Alma\Auth\Contracts\AuthenticatableUser;
+use Alma\Auth\Contracts\CompromisedPasswordChecker;
 use Alma\Auth\Contracts\OAuthIdentityVerifier;
 use Alma\Auth\Contracts\PasskeyCeremony;
 use Alma\Auth\Contracts\RbacPolicy;
@@ -23,6 +24,7 @@ use Alma\Auth\Models\UserRole;
 use Alma\Auth\Support\Base64Url;
 use Alma\Auth\ValueObjects\LoginResult;
 use Alma\Auth\ValueObjects\RefreshRotationResult;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -37,6 +39,7 @@ final class AuthService implements AuditLogger, RbacPolicy
         private RefreshTokenRepository $refreshTokens,
         private PasskeyCeremony $passkeyCeremony,
         private OAuthIdentityVerifier $oauthVerifier,
+        private CompromisedPasswordChecker $compromisedPasswords,
     ) {}
 
     public function attemptLogin(
@@ -85,6 +88,70 @@ final class AuthService implements AuditLogger, RbacPolicy
         $this->clearLockout($email, $ip);
 
         return $this->finishLogin($user, $ip, $deviceFingerprint);
+    }
+
+    public function openAccount(string $email, string $password, string $name, string $ip = '0.0.0.0'): bool
+    {
+        $email = mb_strtolower(trim($email));
+        $name = trim($name);
+        if ($name === '') {
+            $local = strstr($email, '@', true);
+            $name = is_string($local) && $local !== '' ? $local : 'cuenta';
+        }
+
+        if ($this->compromisedPasswords->isCompromised($password)) {
+            Hash::make($password);
+            $this->log(AuthEventType::AccountOpenRejected->value, [
+                'email' => $email,
+                'ip' => $ip,
+                'reason' => 'compromised_password',
+            ]);
+
+            return false;
+        }
+
+        $existing = $this->resolveUser($email);
+        if ($existing !== null) {
+            Hash::make($password);
+            $this->log(AuthEventType::AccountOpenIgnored->value, [
+                'email' => $email,
+                'ip' => $ip,
+                'reason' => 'already_exists',
+            ]);
+
+            return true;
+        }
+
+        /** @var class-string<AuthenticatableUser> $model */
+        $model = config('alma-auth.user_model');
+        try {
+            $user = $model::query()->create([
+                'name' => $name,
+                'email' => $email,
+                'password' => $password,
+            ]);
+        } catch (UniqueConstraintViolationException) {
+            Hash::make($password);
+            $this->log(AuthEventType::AccountOpenIgnored->value, [
+                'email' => $email,
+                'ip' => $ip,
+                'reason' => 'already_exists',
+            ]);
+
+            return true;
+        }
+
+        if (! $user instanceof AuthenticatableUser) {
+            throw new \RuntimeException('alma/auth: user_model must implement AuthenticatableUser.');
+        }
+
+        $this->log(AuthEventType::AccountOpened->value, [
+            'email' => $email,
+            'ip' => $ip,
+            'user_id' => $user->getAuthIdentifier(),
+        ]);
+
+        return true;
     }
 
     /**
@@ -1275,7 +1342,8 @@ final class AuthService implements AuditLogger, RbacPolicy
             throw new \RuntimeException('Config alma-auth.user_model is required.');
         }
 
-        $user = $model::query()->where('email', $email)->first();
+        $email = mb_strtolower(trim($email));
+        $user = $model::query()->whereRaw('lower(email) = ?', [$email])->first();
 
         return $user instanceof AuthenticatableUser ? $user : null;
     }

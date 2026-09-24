@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Alma\Auth;
 
 use Alma\Auth\Contracts\AuditLogger;
+use Alma\Auth\Contracts\CompromisedPasswordChecker;
 use Alma\Auth\Contracts\OAuthIdentityVerifier;
 use Alma\Auth\Contracts\PasskeyCeremony;
 use Alma\Auth\Contracts\RbacPolicy;
@@ -14,6 +15,7 @@ use Alma\Auth\Services\AuthService;
 use Alma\Auth\Services\CompositeOAuthIdentityVerifier;
 use Alma\Auth\Services\EloquentRefreshTokenRepository;
 use Alma\Auth\Services\GoogleOAuthIdentityVerifier;
+use Alma\Auth\Services\HibpPasswordChecker;
 use Alma\Auth\Services\RejectingOAuthIdentityVerifier;
 use Alma\Auth\Services\WebAuthnPasskeyCeremony;
 use Illuminate\Routing\Router;
@@ -41,6 +43,7 @@ final class AuthServiceProvider extends ServiceProvider
 
             return new CompositeOAuthIdentityVerifier($map);
         });
+        $this->app->singleton(CompromisedPasswordChecker::class, HibpPasswordChecker::class);
         $this->app->singleton(AuthService::class);
         $this->app->singleton(AuditLogger::class, fn ($app) => $app->make(AuthService::class));
         $this->app->singleton(RbacPolicy::class, fn ($app) => $app->make(AuthService::class));
